@@ -227,4 +227,4 @@ volumes:
 
 networks:
   default:
-    external: true
+    external: false
