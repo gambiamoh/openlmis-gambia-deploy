@@ -47,7 +47,7 @@ services:
       - 'consul-template-log:/var/log/consul-template'
     labels:
       - 'traefik.enable=true'
-      - 'traefik.http.routers.nginx.rule=Host(`dev.elmis.apps.moh.gm`)'
+      - 'traefik.http.routers.nginx.rule=Host(`uat.elmis.apps.moh.gm`)'
       - 'traefik.http.routers.nginx.entrypoints=websecure'
       - 'traefik.http.routers.nginx.tls.certresolver=myresolver'
     depends_on: [consul]
