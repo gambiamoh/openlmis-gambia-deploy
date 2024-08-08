@@ -199,11 +199,10 @@ services:
     logging: *default-logging
 
   db:
-    restart: always
     image: openlmis/postgres:${OL_POSTGRES_VERSION}
     env_file: settings.env
     volumes:
-      - pg-data:/var/lib/postgresql
+      - pg-data:/var/lib/postgresql/data
     ports:
       - 5432:5432
     networks:
