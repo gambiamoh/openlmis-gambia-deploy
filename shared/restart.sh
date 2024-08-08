@@ -3,7 +3,6 @@
 WIPE_MSG="Will WIPE data!"
 KEEP_MSG="Will keep data."
 
-docker compose kill
 docker compose down
 
 export KEEP_OR_WIPE="keep"
