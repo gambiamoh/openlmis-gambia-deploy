@@ -1,4 +1,12 @@
-version: '2'
+version: '3.3'
+
+x-logging:
+  &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "7"
+
 services:
 
   reverse-proxy:
@@ -36,6 +44,7 @@ services:
       - "8400"
       - "8500:8500"
       - "53"
+    logging: *default-logging
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
@@ -53,86 +62,99 @@ services:
     depends_on: [consul]
     networks:
       - 'default'
+    logging: *default-logging
 
   reference-ui:
     restart: always
-    image: openlmisgm/gambia-ui:1.0.0
+    image: openlmisgambia/ui:${GAMBIA_UI_VERSION}
     env_file: settings.env
     depends_on: [consul]
+    logging: *default-logging
 
   requisition:
     restart: always
     image: openlmis/requisition:${OL_REQUISITION_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   referencedata:
     restart: always
     image: openlmis/referencedata:${OL_REFERENCEDATA_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   auth:
     restart: always
     image: openlmis/auth:${OL_AUTH_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'auth-tomcat-log:/var/log/auth-tomcat'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   notification:
     restart: always
     image: openlmis/notification:${OL_NOTIFICATION_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Dspring.datasource.hikari.maximum-pool-size=5 -Xmx512m -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   fulfillment:
     restart: always
     image: openlmis/fulfillment:${OL_FULFILLMENT_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-
+    logging: *default-logging
 
   cce:
     restart: always
     image: openlmis/cce:${OL_CCE_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
 
   stockmanagement:
@@ -140,35 +162,41 @@ services:
     image: openlmis/stockmanagement:${OL_STOCKMANAGEMENT_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   report:
     restart: always
-    image: openlmis/report:${OL_REPORT_VERSION}
+    image: openlmisgambia/reports:${GAMBIA_REPORTS_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx2560m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   diagnostics:
     restart: always
     image: openlmis/diagnostics:${OL_DIAGNOSTICS_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
+    logging: *default-logging
 
   db:
     restart: always
@@ -192,6 +220,7 @@ services:
     depends_on:
       - service-configuration
       - consul
+    logging: *default-logging
 
   service-configuration:
     build:
@@ -202,8 +231,8 @@ services:
   ftp:
     image: hauptmedia/proftpd
     ports:
-      - "21:21"
-      - "20:20"
+      - "${OL_FTP_PORT_21:-21}:21"
+      - "${OL_FTP_PORT_20:-20}:20"
     env_file: settings.env
     depends_on: [consul]
 
