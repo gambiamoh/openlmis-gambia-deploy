@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 export DOCKER_TLS_VERIFY="1"
-export DOCKER_HOST="3.65.86.70:2376"
+export DOCKER_HOST="dev.elmis.apps.moh.gm:2376"
 export DOCKER_CERT_PATH="${PWD}/credentials"
 export KEEP_OR_WIPE="keep"
 
