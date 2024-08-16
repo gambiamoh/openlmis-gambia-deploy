@@ -7,7 +7,6 @@ x-logging:
     max-size: "50m"
     max-file: "7"
 
-
 services:
 
   reverse-proxy:
@@ -222,7 +221,7 @@ services:
     depends_on:
       - service-configuration
       - consul
-  logging: *default-logging
+    logging: *default-logging
 
   service-configuration:
     build:
