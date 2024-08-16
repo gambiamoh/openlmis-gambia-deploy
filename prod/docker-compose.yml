@@ -1,4 +1,13 @@
 version: '2'
+
+x-logging:
+  &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "7"
+
+
 services:
 
   reverse-proxy:
@@ -36,6 +45,7 @@ services:
       - "8400"
       - "8500:8500"
       - "53"
+    logging: *default-logging
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
@@ -53,12 +63,14 @@ services:
     depends_on: [consul]
     networks:
       - 'default'
+    logging: *default-logging
 
   reference-ui:
     restart: always
     image: openlmisgm/gambia-ui:1.0.0
     env_file: settings.env
     depends_on: [consul]
+    logging: *default-logging
 
   requisition:
     restart: always
@@ -69,8 +81,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   referencedata:
     restart: always
@@ -81,8 +95,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   auth:
     restart: always
@@ -94,8 +110,10 @@ services:
     volumes:
       - 'service-config:/config'
       - 'auth-tomcat-log:/var/log/auth-tomcat'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   notification:
     restart: always
@@ -106,8 +124,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   fulfillment:
     restart: always
@@ -118,8 +138,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
 
   cce:
@@ -131,8 +153,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
 
   stockmanagement:
@@ -144,8 +168,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   report:
     restart: always
@@ -156,8 +182,10 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
 
   diagnostics:
     restart: always
@@ -168,7 +196,9 @@ services:
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
+      - 'syslog:/var/log'
     depends_on: [log]
+    logging: *default-logging
 
   db:
     restart: always
@@ -192,6 +222,7 @@ services:
     depends_on:
       - service-configuration
       - consul
+  logging: *default-logging
 
   service-configuration:
     build:
