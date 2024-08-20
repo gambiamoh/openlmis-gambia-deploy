@@ -8,6 +8,34 @@ x-logging:
     max-file: "7"
 
 services:
+
+  reverse-proxy:
+    restart: always
+    image: 'traefik:v2.3'
+    container_name: 'reverse-proxy'
+    command:
+      - '--api.insecure=true'
+      - '--entrypoints.web.address=:80'
+      - '--entrypoints.web.http.redirections.entryPoint.to=websecure'
+      - '--entrypoints.web.http.redirections.entryPoint.scheme=https'
+      - '--entrypoints.web.http.redirections.entrypoint.permanent=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--entrypoints.websecure.address=:443'
+      - '--entryPoints.websecure.forwardedHeaders.insecure=true'
+      - '--entryPoints.websecure.proxyProtocol.insecure=true'
+      - '--certificatesresolvers.myresolver.acme.tlschallenge=true'
+      - '--certificatesresolvers.myresolver.acme.email=info@elmis-dev.org'
+      - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
+    ports:
+      - '80:80'
+      - '443:443'
+    networks:
+      - 'default'
+    volumes:
+      - '/var/lib/docker/volumes/letsencrypt:/letsencrypt'
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+
   consul:
     command: -server -bootstrap
     image: gliderlabs/consul-server
@@ -20,15 +48,20 @@ services:
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
-    ports:
-      - '80:80'
     env_file: settings.env
     environment:
       NGINX_LOG_DIR: '/var/log/nginx/log'
     volumes:
       - 'nginx-log:/var/log/nginx/log'
       - 'consul-template-log:/var/log/consul-template'
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.nginx.rule=Host(`dev.elmis.apps.moh.gm`)'
+      - 'traefik.http.routers.nginx.entrypoints=websecure'
+      - 'traefik.http.routers.nginx.tls.certresolver=myresolver'
     depends_on: [consul]
+    networks:
+      - 'default'
     logging: *default-logging
 
   reference-ui:
@@ -172,6 +205,10 @@ services:
       - pg-data:/var/lib/postgresql/data
     ports:
       - 5432:5432
+    networks:
+      default:
+        aliases:
+          - olmis-db
     depends_on: [consul]
 
   log:
@@ -216,3 +253,7 @@ volumes:
     external: false
   pg-data:
     external: true
+
+networks:
+  default:
+    external: false
