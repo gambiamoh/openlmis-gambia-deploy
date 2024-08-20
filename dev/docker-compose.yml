@@ -170,6 +170,10 @@ services:
       - pg-data:/var/lib/postgresql/data
     ports:
       - 5432:5432
+    networks:
+      default:
+        aliases:
+          - olmis-db
     depends_on: [consul]
 
   log:
@@ -214,3 +218,7 @@ volumes:
     external: false
   pg-data:
     external: true
+
+networks:
+  default:
+    external: false
