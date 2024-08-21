@@ -30,9 +30,9 @@ services:
     depends_on: [consul]
     networks:
       - 'default'
-    logging: *default-logging
     ports:
       - '80:80'
+    logging: *default-logging
 
   reference-ui:
     restart: always
@@ -125,7 +125,6 @@ services:
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
     logging: *default-logging
-
 
   stockmanagement:
     restart: always
