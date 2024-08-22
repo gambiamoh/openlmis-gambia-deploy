@@ -104,3 +104,9 @@ volumes:
     external: false
   pgdata:
     external: true
+  log:
+    external: false
+  nifi-log:
+    external: false
+  superset-log:
+    external: false
