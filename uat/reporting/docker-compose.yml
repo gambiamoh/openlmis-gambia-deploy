@@ -36,7 +36,7 @@ services:
       sh -c "cp -f /config/nginx/nginx.tmpl /etc/nginx/nginx.tmpl
       && . /config/nginx/set-authorization.sh
       && . /etc/nginx/run_with_template.sh"
-    depends_on: [consul, config-container]
+    depends_on: [config-container]
 
   nifi:
     image: apache/nifi:${OL_NIFI_VERSION}
