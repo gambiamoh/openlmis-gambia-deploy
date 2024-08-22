@@ -29,10 +29,10 @@ services:
     image: gliderlabs/consul-server
     ports:
       - "8501:8500"
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
+#    logging:
+#      driver: syslog
+#      options:
+#        syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
     depends_on: [log]
 
   nginx:
@@ -47,10 +47,10 @@ services:
       - config-volume:/config
     entrypoint: >
       /bin/sh -c "/config/nginx/init.sh"
-    logging:
-      driver: syslog
-      options:
-        syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
+#    logging:
+#      driver: syslog
+#      options:
+#        syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
     depends_on: [consul, log, config-container]
 
   nifi:
