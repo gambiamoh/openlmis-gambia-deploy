@@ -3,7 +3,7 @@
 export DOCKER_TLS_VERIFY="1"
 export COMPOSE_TLS_VERSION=TLSv1_2
 export DOCKER_HOST="dev.elmis.report.apps.moh.gm:2376"
-export DOCKER_CERT_PATH="${PWD}/../../../deployment-config/dev_env/credentials/superset_credentials"
+export DOCKER_CERT_PATH="${PWD}/../../../deployment-config/dev_env/reporting/credentials"
 export DOCKER_COMPOSE_BIN=/usr/bin/docker-compose
 
 export REPORTING_DIR_NAME=reporting
@@ -18,4 +18,6 @@ docker volume create pgdata
 cd "$reportingRepo/$REPORTING_DIR_NAME"
 $DOCKER_COMPOSE_BIN kill
 $DOCKER_COMPOSE_BIN down -v --remove-orphans
-$DOCKER_COMPOSE_BIN up --build --force-recreate -d
+$DOCKER_COMPOSE_BIN build --no-cache
+
+$DOCKER_COMPOSE_BIN up -d
