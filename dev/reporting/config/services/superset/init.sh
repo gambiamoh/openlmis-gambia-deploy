@@ -28,8 +28,7 @@ flask fab create-admin --username ${SUPERSET_ADMIN_USERNAME} --firstname Admin -
 
 superset db upgrade &&
 superset import_datasources -p $CONFIG_DIR/datasources/database.yaml &&
-# TODO: Export openlmis_uat_dashboards after upgrade
-# superset import_dashboards -u ${SUPERSET_ADMIN_USERNAME} -p $CONFIG_DIR/dashboards/openlmis_uat_dashboards.zip &&
+superset import_dashboards -u ${SUPERSET_ADMIN_USERNAME} -p $CONFIG_DIR/dashboards/openlmis_gambia_dashboards.zip &&
 superset init &&
 
 gunicorn $GUNICORN_CMD_ARGS "superset.app:create_app()"

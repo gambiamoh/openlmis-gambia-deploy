@@ -233,4 +233,4 @@ volumes:
   cron-periodic-volume:
     external: false
   pgdata:
-    external: false
+    external: true
