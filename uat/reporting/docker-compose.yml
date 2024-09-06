@@ -69,7 +69,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [log, config-container, nginx]
+    depends_on: [log,config-container,nginx]
     env_file: settings.env
 
   db-service-configuration:
@@ -94,7 +94,7 @@ services:
       default:
         aliases:
           - reporting-db
-    depends_on: [log, db-service-configuration]
+    depends_on: [log,db-service-configuration]
 
   cron-config:
     build:
@@ -112,7 +112,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [log, cron-config]
+    depends_on: [log,cron-config]
 
   zookeeper:
     image: confluentinc/cp-zookeeper:${OL_CONFLUENT_VERSION}
@@ -124,7 +124,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ log ]
+    depends_on: [log]
 
   kafka:
     image: confluentinc/cp-kafka:${OL_CONFLUENT_VERSION}
