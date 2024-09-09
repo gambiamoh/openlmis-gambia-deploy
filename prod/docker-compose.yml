@@ -1,4 +1,4 @@
-version: '2'
+version: '3.3'
 
 x-logging:
   &default-logging
@@ -30,13 +30,13 @@ services:
     depends_on: [consul]
     networks:
       - 'default'
-    logging: *default-logging
     ports:
       - '80:80'
-      
+    logging: *default-logging
+
   reference-ui:
     restart: always
-    image: openlmisgm/gambia-ui:1.0.0
+    image: openlmisgambia/ui:${GAMBIA_UI_VERSION}
     env_file: settings.env
     depends_on: [consul]
     logging: *default-logging
@@ -46,7 +46,7 @@ services:
     image: openlmis/requisition:${OL_REQUISITION_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -60,7 +60,7 @@ services:
     image: openlmis/referencedata:${OL_REFERENCEDATA_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -74,7 +74,7 @@ services:
     image: openlmis/auth:${OL_AUTH_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -89,7 +89,7 @@ services:
     image: openlmis/notification:${OL_NOTIFICATION_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Dspring.datasource.hikari.maximum-pool-size=10 -Xmx512m -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -103,7 +103,7 @@ services:
     image: openlmis/fulfillment:${OL_FULFILLMENT_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx1024m -Dspring.datasource.hikari.maximum-pool-size=15 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -111,14 +111,13 @@ services:
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
     logging: *default-logging
-
 
   cce:
     restart: always
     image: openlmis/cce:${OL_CCE_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -127,13 +126,12 @@ services:
     command: ["/wait-for-postgres.sh", "/run.sh"]
     logging: *default-logging
 
-
   stockmanagement:
     restart: always
     image: openlmis/stockmanagement:${OL_STOCKMANAGEMENT_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -144,10 +142,10 @@ services:
 
   report:
     restart: always
-    image: openlmis/report:${OL_REPORT_VERSION}
+    image: openlmisgambia/reports:${GAMBIA_REPORTS_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration,filesystem:/demo-data'
+      JAVA_OPTS: '-server -Xmx2560m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -161,27 +159,13 @@ services:
     image: openlmis/diagnostics:${OL_DIAGNOSTICS_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dspring.datasource.hikari.maximum-pool-size=10 -Dlogging.config=/config/log/logback.xml'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
     depends_on: [log]
     logging: *default-logging
-
-  db:
-    restart: always
-    image: openlmis/postgres:${OL_POSTGRES_VERSION}
-    env_file: settings.env
-    volumes:
-      - pg-data:/var/lib/postgresql
-    ports:
-      - 5432:5432
-    networks:
-      default:
-        aliases:
-          - olmis-db
-    depends_on: [consul]
 
   log:
     restart: always
@@ -198,12 +182,13 @@ services:
       context: config
     volumes:
       - service-config:/config
+    logging: *default-logging
 
   ftp:
     image: hauptmedia/proftpd
     ports:
-      - "21:21"
-      - "20:20"
+      - "${OL_FTP_PORT_21:-21}:21"
+      - "${OL_FTP_PORT_20:-20}:20"
     env_file: settings.env
     depends_on: [consul]
 
@@ -222,8 +207,6 @@ volumes:
     external: false
   service-config:
     external: false
-  pg-data:
-    external: true
 
 networks:
   default:
