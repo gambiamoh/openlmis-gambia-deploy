@@ -131,7 +131,7 @@ services:
     image: openlmis/stockmanagement:${OL_STOCKMANAGEMENT_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dspring.datasource.hikari.maximum-pool-size=5 -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
@@ -152,6 +152,19 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
+    logging: *default-logging
+
+  buq:
+    restart: always
+    image: openlmis/buq:${OL_BUQ_VERSION}
+    env_file: settings.env
+    environment:
+      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+    volumes:
+      - 'service-config:/config'
+      - 'syslog:/var/log'
+    depends_on: [log]
     logging: *default-logging
 
   diagnostics:
