@@ -1726,8 +1726,7 @@ CREATE TABLE public.kafka_stock_cards (
     programid uuid NOT NULL, 
     origineventid uuid NOT NULL, 
     isshowed boolean, 
-    isactive boolean, 
-    unitoforderableid uuid NOT NULL
+    isactive boolean
 );
 
 
