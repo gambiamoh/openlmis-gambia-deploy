@@ -1715,68 +1715,6 @@ CREATE TABLE public.kafka_template_parameters (
 ALTER TABLE public.kafka_template_parameters OWNER TO postgres;
 
 --
--- Name: stock_cards; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.kafka_stock_cards (
-    id uuid NOT NULL,
-    facilityid uuid NOT NULL,
-    lotid uuid, 
-    orderableid uuid NOT NULL, 
-    programid uuid NOT NULL, 
-    origineventid uuid NOT NULL, 
-    isshowed boolean, 
-    isactive boolean
-);
-
-
-ALTER TABLE public.kafka_stock_cards OWNER TO postgres;
-
---
--- Name: stock_card_line_items; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.kafka_stock_card_line_items (
-    id uuid NOT NULL,
-    destinationfreetext character varying(255),
-    documentnumber character varying(255), 
-    occurreddate date NOT NULL, 
-    processeddate timestamp with time zone NOT NULL, 
-    quantity integer NOT NULL,
-    reasonfreetext character varying(255), 
-    signature character varying(255), 
-    sourcefreetext character varying(255), 
-    userid uuid NOT NULL, 
-    destinationid uuid, 
-    origineventid uuid NOT NULL, 
-    reasonid uuid, 
-    sourceid uuid, 
-    stockcardid uuid NOT NULL, 
-    extradata jasonb
-);
-
-
-ALTER TABLE public.kafka_stock_card_line_items OWNER TO postgres;
-
-
---
--- Name: stock_card_line_item_reasons; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.kafka_stock_card_line_item_reasons (
-    id uuid NOT NULL,
-    description text, 
-    isfreetextallowed boolean NOT NULL, 
-    name text NOT NULL, 
-    reasoncategory text NOT NULL, 
-    reasontype text NOT NULL
-);
-
-
-ALTER TABLE public.kafka_stock_card_line_item_reasons OWNER TO postgres;
-
-
---
 -- Name: available_requisition_column_options available_requisition_column_options_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1913,30 +1851,6 @@ ALTER TABLE ONLY public.kafka_jasper_templates
 
 
 --
--- Name: stock_cards stock_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.kafka_stock_cards
-    ADD CONSTRAINT stock_cards_pkey PRIMARY KEY (id);
-
-
---
--- Name: stock_card_line_items stock_card_line_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.kafka_stock_card_line_items
-    ADD CONSTRAINT stock_card_line_items_pkey PRIMARY KEY (id);
-
-
---
--- Name: stock_card_line_item_reasons stock_card_line_item_reasons_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.kafka_stock_card_line_item_reasons
-    ADD CONSTRAINT stock_card_line_item_reasons_pkey PRIMARY KEY (id);
-
-
---
 -- Name: available_non_full_supply_products_requisitionid_idx; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -2027,20 +1941,6 @@ CREATE INDEX requisitions_previous_requisitions_requisitionid_idx ON public.kafk
 --
 
 CREATE INDEX status_changes_requisitionid_idx ON public.kafka_status_changes USING btree (requisitionid);
-
-
---
--- Name: stock_card_facility_program_orderable; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE UNIQUE INDEX stock_card_facility_program_orderable ON public.kafka_stock_cards USING btree (facilityid, programid, orderableid);
-
-
---
--- Name: stock_card_line_items_stock_idx; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX stock_card_line_items_stock_idx ON public.stock_card_line_items USING btree (stockcardid);
 
 
 --
@@ -2411,25 +2311,3 @@ left join public.kafka_facility_operators fo on fo.id = f.operatedbyid
 WITH DATA;
 
 ALTER MATERIALIZED VIEW facilities OWNER TO postgres;
-
-
-CREATE MATERIALIZED VIEW stock_adjustments_view AS
-SELECT line_item.occurreddate, line_item.quantity,
-reason.name AS reason_name, reason.reasoncategory,
-program.name AS program_name, program.code AS program_code,
-facility.name AS facility_name, 
-district.name AS district_name, 
-geo_level.name AS region_name, lot.lotcode,
-product.fullproductname, as product,
-FROM kafka_stock_cards card
-LEFT JOIN kafka_stock_card_line_items line_item ON card.id = line_item.stockcardid
-LEFT JOIN kafka_stock_card_line_item_reasons reason ON line_item.reasonid = reason.id
-LEFT JOIN kafka_orderables product ON card.orderableid = product.id
-LEFT JOIN kafka_lots lot ON card.lotid = lot.id
-LEFT JOIN kafka_programs program ON card.programid = program.id
-LEFT JOIN kafka_facilities facility ON card.facilityid = facility.id
-LEFT JOIN kafka_geographic_zones district ON facility.geographiczoneid = district.id
-LEFT JOIN kafka_geographic_levels geo_level ON district.levelid = geo_level.id
-WITH DATA;
-
-ALTER MATERIALIZED VIEW stock_adjustments_view OWNER TO postgres;
