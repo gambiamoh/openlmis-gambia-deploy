@@ -2414,18 +2414,13 @@ ALTER MATERIALIZED VIEW facilities OWNER TO postgres;
 
 
 CREATE MATERIALIZED VIEW stock_adjustments_view AS
-SELECT line_item.occurreddate
-, line_item.quantity
-, reason.name AS reason_name
-, reason.reasoncategory
-, program.name AS program_name
-, program.code AS program_code
-, facility.name AS facility_name
-, district.name AS district_name
-, geo_level.name AS region_name
-, lot.lotcode
-, product.fullproductname as product
-, null as username
+SELECT line_item.occurreddate, line_item.quantity,
+reason.name AS reason_name, reason.reasoncategory,
+program.name AS program_name, program.code AS program_code,
+facility.name AS facility_name, 
+district.name AS district_name, 
+geo_level.name AS region_name, lot.lotcode,
+product.fullproductname, as product,
 FROM kafka_stock_cards card
 LEFT JOIN kafka_stock_card_line_items line_item ON card.id = line_item.stockcardid
 LEFT JOIN kafka_stock_card_line_item_reasons reason ON line_item.reasonid = reason.id
@@ -2435,29 +2430,6 @@ LEFT JOIN kafka_programs program ON card.programid = program.id
 LEFT JOIN kafka_facilities facility ON card.facilityid = facility.id
 LEFT JOIN kafka_geographic_zones district ON facility.geographiczoneid = district.id
 LEFT JOIN kafka_geographic_levels geo_level ON district.levelid = geo_level.id
-UNION
-SELECT 
-null
-, null
-, null
-, null
-, kp.name as program_name
-, null
-, f.name as facility_name
-, gz.name as district_name
-, kgl.name as region_name
-, null
-, null
-, u.username
-FROM kafka_right_assignments kra
-LEFT JOIN kafka_users u ON u.id = kra.userid
-LEFT JOIN kafka_facilities f on f.id = kra.facilityid
-LEFT JOIN kafka_facility_types ft ON ft.id = f.typeid
-LEFT JOIN public.kafka_geographic_zones gz on gz.id = f.geographiczoneid
-LEFT JOIN kafka_geographic_levels kgl on kgl.id = gz.levelid 
-LEFT JOIN kafka_programs kp on kp.id = kra.programid
-WHERE facilityid IS NOT NULL AND programid IS NOT null
-and rightname in ('STOCK_CARDS_VIEW')
 WITH DATA;
 
 ALTER MATERIALIZED VIEW stock_adjustments_view OWNER TO postgres;
