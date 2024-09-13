@@ -1955,17 +1955,23 @@ CREATE TABLE reporting_dates (
 
 ALTER TABLE reporting_dates OWNER TO postgres;
 
----
---- Name: view_facility_access; Type: TABLE; Schema: public; Owner: postgres
----
+-- Insert default values for reporting dates --
+INSERT INTO reporting_dates(due_days, late_days, country) 
+    VALUES(14, 7, 'Malawi'), (14, 7, 'Mozambique');
+
+
 CREATE MATERIALIZED VIEW view_facility_access AS
-SELECT DISTINCT u.username, facilityid, programid, rightname
+SELECT DISTINCT u.username, facilityid, programid
 FROM kafka_right_assignments ra
   LEFT JOIN kafka_users u ON u.id = ra.userid
-WHERE facilityid IS NOT NULL AND programid IS NOT null
-and rightname in ('REQUISITION_VIEW');
+WHERE facilityid IS NOT NULL AND programid IS NOT NULL
+UNION
+SELECT DISTINCT 'admin', facilityid, programid
+FROM kafka_right_assignments ra
+  LEFT JOIN kafka_users u ON u.id = ra.userid
+WHERE facilityid IS NOT NULL AND programid IS NOT NULL AND u.username = 'administrator'
+;
 
-ALTER MATERIALIZED VIEW view_facility_access OWNER TO postgres;
 
 ---
 --- Name: reporting_rate_and_timeliness; Type: TABLE; Schema: public; Owner: postgres
@@ -2150,7 +2156,6 @@ SELECT li.requisition_line_item_id
   , r.supplyingfacilityid AS supplying_facility
   , r.supervisorynodeid AS supervisory_node
   , r.facilityid AS facility_id
-  , r.status AS req_status
   , f.code AS facility_code
   , f.name AS facility_name
   , f.active AS facilty_active_status
@@ -2199,6 +2204,13 @@ SELECT li.requisition_line_item_id
   , li.price_per_pack
   , li.total_cost
   , li.total_received_quantity
+  , sc.requisitionid AS status_req_id
+  , sc.status AS req_status
+  , sc.authorid AS author_id
+  , sc.createddate AS status_date
+  , fa.facilityid AS facility
+  , fa.programid AS program
+  , fa.username
   , li.closing_balance
   , li.amc
   , li.consumption
@@ -2208,9 +2220,9 @@ SELECT li.requisition_line_item_id
   , rd.due_days
   , rd.late_days
   , li.combined_stockout
-  , li.stock_status,
-  null as username
+  , li.stock_status
 FROM kafka_requisitions r 
+  LEFT JOIN kafka_status_changes sc ON sc.requisitionid = r.id
   LEFT JOIN kafka_facilities f ON f.id = r.facilityid
   LEFT JOIN kafka_geographic_zones dgz ON dgz.id = f.geographiczoneid
   LEFT JOIN kafka_geographic_zones rgz ON rgz.id = dgz.parentid
@@ -2221,6 +2233,7 @@ FROM kafka_requisitions r
   LEFT JOIN kafka_processing_periods pp ON pp.id = r.processingperiodid
   LEFT JOIN kafka_processing_schedules ps ON ps.id = pp.processingscheduleid
   LEFT JOIN reporting_dates rd ON rd.country = cgz.name
+  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = r.programid
   LEFT JOIN (SELECT DISTINCT ON (rli.id) rli.id AS requisition_line_item_id
       , requisitionid AS requisition_id
       , rli.orderableid AS orderable_id
@@ -2280,24 +2293,6 @@ FROM kafka_requisitions r
       , priceperpack
       , totalcost
       , totalreceivedquantity) li ON li.requisition_id = r.id
-UNION 
-SELECT null, null, null, null, null, null, null, null, null, null, f.name as facility_name, 
-null, null, null, gz.name as district_name, 
-null, null, kgl.name as region_name,  
-null, null, null, null, null, ft.name AS facility_type_name, null, null, null, null, null, kp.name as program_name,
-null, null, null, null, null, null, null, null, null, null, 
-null, null, null, null, null, null, null, null, null, null, 
-null, null, null, null, null, null, null, null, null, null, 
-null, null, null, null, null, null, null, u.username
-FROM kafka_right_assignments kra
-LEFT JOIN kafka_users u ON u.id = kra.userid
-LEFT JOIN kafka_facilities f on f.id = kra.facilityid
-LEFT JOIN kafka_facility_types ft ON ft.id = f.typeid
-LEFT JOIN public.kafka_geographic_zones gz on gz.id = f.geographiczoneid
-LEFT JOIN kafka_geographic_levels kgl on kgl.id = gz.levelid 
-LEFT JOIN kafka_programs kp on kp.id = kra.programid
-WHERE facilityid IS NOT NULL AND programid IS NOT null
-and rightname in ('REQUISITION_VIEW')
 WITH DATA;
 
 ALTER MATERIALIZED VIEW stock_status_and_consumption OWNER TO postgres;
