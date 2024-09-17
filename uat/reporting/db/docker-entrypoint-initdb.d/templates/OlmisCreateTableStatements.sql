@@ -128,7 +128,8 @@ CREATE TABLE public.kafka_facility_types (
     code text NOT NULL,
     description text,
     displayorder integer,
-    name text
+    name text,
+    primaryhealthcare boolean
 );
 
 
@@ -1603,7 +1604,8 @@ CREATE TABLE public.kafka_requisitions (
     datephysicalstockcountcompleted date,
     version bigint DEFAULT 0,
     reportonly boolean,
-    extradata jsonb
+    extradata jsonb,
+    patientsdata text
 );
 
 
