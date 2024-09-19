@@ -1719,6 +1719,7 @@ ALTER TABLE public.kafka_template_parameters OWNER TO postgres;
 --
 -- Name: stock_cards; Type: TABLE; Schema: public; Owner: postgres
 --
+DROP TABLE IF EXISTS public.kafka_stock_cards;
 
 CREATE TABLE public.kafka_stock_cards (
     id uuid NOT NULL,
@@ -1737,6 +1738,7 @@ ALTER TABLE public.kafka_stock_cards OWNER TO postgres;
 --
 -- Name: stock_card_line_items; Type: TABLE; Schema: public; Owner: postgres
 --
+DROP TABLE IF EXISTS public.kafka_stock_card_line_items;
 
 CREATE TABLE public.kafka_stock_card_line_items (
     id uuid NOT NULL,
