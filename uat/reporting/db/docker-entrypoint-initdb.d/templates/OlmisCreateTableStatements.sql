@@ -2258,6 +2258,8 @@ ALTER MATERIALIZED VIEW adjustments OWNER TO postgres;
 ---
 --- Name: stock_status_and_consumption; Type: TABLE; Schema: public; Owner: postgres
 ---
+DROP MATERIALIZED VIEW stock_status_and_consumption;
+
 CREATE MATERIALIZED VIEW stock_status_and_consumption AS
 SELECT li.requisition_line_item_id
   , r.id
@@ -2325,8 +2327,7 @@ SELECT li.requisition_line_item_id
   , rd.due_days
   , rd.late_days
   , li.combined_stockout
-  , li.stock_status,
-  null as username
+  , li.stock_status
 FROM kafka_requisitions r 
   LEFT JOIN kafka_facilities f ON f.id = r.facilityid
   LEFT JOIN kafka_geographic_zones dgz ON dgz.id = f.geographiczoneid
@@ -2397,24 +2398,6 @@ FROM kafka_requisitions r
       , priceperpack
       , totalcost
       , totalreceivedquantity) li ON li.requisition_id = r.id
-UNION 
-SELECT null, null, null, null, null, null, null, null, null, null, f.name as facility_name, 
-null, null, null, gz.name as district_name, 
-null, null, kgl.name as region_name,  
-null, null, null, null, null, ft.name AS facility_type_name, null, null, null, null, null, kp.name as program_name,
-null, null, null, null, null, null, null, null, null, null, 
-null, null, null, null, null, null, null, null, null, null, 
-null, null, null, null, null, null, null, null, null, null, 
-null, null, null, null, null, null, null, u.username
-FROM kafka_right_assignments kra
-LEFT JOIN kafka_users u ON u.id = kra.userid
-LEFT JOIN kafka_facilities f on f.id = kra.facilityid
-LEFT JOIN kafka_facility_types ft ON ft.id = f.typeid
-LEFT JOIN public.kafka_geographic_zones gz on gz.id = f.geographiczoneid
-LEFT JOIN kafka_geographic_levels kgl on kgl.id = gz.levelid 
-LEFT JOIN kafka_programs kp on kp.id = kra.programid
-WHERE facilityid IS NOT NULL AND programid IS NOT null
-and rightname in ('REQUISITION_VIEW')
 WITH DATA;
 
 ALTER MATERIALIZED VIEW stock_status_and_consumption OWNER TO postgres;
