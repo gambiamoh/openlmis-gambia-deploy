@@ -2060,18 +2060,31 @@ ALTER TABLE reporting_dates OWNER TO postgres;
 ---
 --- Name: view_facility_access; Type: TABLE; Schema: public; Owner: postgres
 ---
+DROP MATERIALIZED VIEW view_facility_access;
+
 CREATE MATERIALIZED VIEW view_facility_access AS
-SELECT DISTINCT u.username, facilityid, programid, rightname
+SELECT DISTINCT u.username, facilityid, kf.name as facility_name, programid, kp.name as program_name, rightname,
+dgz.id as district_id, rgz.id as region_id, cgz.id as country_id, ft.id as facility_type_id,
+dgz.name as district_name, rgz.name as region_name, cgz.name as country_name, ft.name as facility_type_name
 FROM kafka_right_assignments ra
   LEFT JOIN kafka_users u ON u.id = ra.userid
+  LEFT JOIN kafka_facilities kf ON kf.id = ra.facilityid
+  left join kafka_programs kp on kp.id = programid
+  LEFT JOIN kafka_geographic_zones dgz ON dgz.id = kf.geographiczoneid
+  LEFT JOIN kafka_geographic_zones rgz ON rgz.id = dgz.parentid
+  LEFT JOIN kafka_geographic_zones cgz ON cgz.id = rgz.parentid
+  LEFT JOIN kafka_facility_types ft ON ft.id = kf.typeid
 WHERE facilityid IS NOT NULL AND programid IS NOT null
-and rightname in ('REQUISITION_VIEW');
+AND rightname in ('REQUISITION_VIEW', 'STOCK_CARDS_VIEW')
+WITH DATA;
 
 ALTER MATERIALIZED VIEW view_facility_access OWNER TO postgres;
 
 ---
 --- Name: reporting_rate_and_timeliness; Type: TABLE; Schema: public; Owner: postgres
 ---
+DROP MATERIALIZED VIEW reporting_rate_and_timeliness;
+
 CREATE MATERIALIZED VIEW reporting_rate_and_timeliness AS
 SELECT f.name
   , dgz.name AS district
@@ -2175,7 +2188,7 @@ FROM kafka_facilities f
   LEFT JOIN kafka_facility_operators fo ON fo.id = f.operatedbyid
   LEFT JOIN reporting_dates rd ON rd.country = cgz.name
   LEFT JOIN kafka_supported_programs sp ON sp.facilityid = f.id AND sp.programid = final_authorized_requisitions.program_id
-  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = final_authorized_requisitions.program_id
+  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = final_authorized_requisitions.program_id AND rightname = 'REQUISITION_VIEW'
 ORDER BY final_authorized_requisitions.processing_period_enddate DESC
 WITH DATA;
 
@@ -2185,6 +2198,8 @@ ALTER MATERIALIZED VIEW reporting_rate_and_timeliness OWNER TO postgres;
 ---
 --- Name: adjustments; Type: TABLE; Schema: public; Owner: postgres
 ---
+DROP MATERIALIZED VIEW adjustments;
+
 CREATE MATERIALIZED VIEW adjustments AS
 SELECT rli.id AS requisition_line_item_id
   , r.id AS requisition_id
@@ -2232,7 +2247,7 @@ FROM kafka_requisitions r
   LEFT JOIN (SELECT DISTINCT ON (requisitionid) id, requisitionid, status, authorid, createddate FROM kafka_status_changes ORDER BY requisitionid, createddate DESC) final_status_changes ON final_status_changes.requisitionid = r.id
   LEFT JOIN kafka_stock_adjustments sa ON sa.requisitionlineitemid = rli.id
   LEFT JOIN kafka_stock_adjustment_reasons sar ON sar.id = sa.reasonid AND sar.requisitionid = r.id
-  LEFT JOIN view_facility_access fa ON fa.facilityid = r.facilityid AND fa.programid = r.programid
+  LEFT JOIN view_facility_access fa ON fa.facilityid = r.facilityid AND fa.programid = r.programid and fa.rightname = 'REQUISITION_VIEW'
 WHERE final_status_changes.status NOT IN ('SKIPPED', 'INITIATED', 'SUBMITTED')
 ORDER BY rli.id, fa.username, r.modifieddate DESC NULLS LAST
 WITH DATA;
@@ -2414,52 +2429,46 @@ WITH DATA;
 
 ALTER MATERIALIZED VIEW facilities OWNER TO postgres;
 
+---
+--- Name: stock_adjustments_view; Type: TABLE; Schema: public; Owner: postgres
+---
+
+DROP MATERIALIZED VIEW stock_adjustments_view;
 
 CREATE MATERIALIZED VIEW stock_adjustments_view AS
-SELECT line_item.occurreddate
+SELECT DISTINCT line_item.id
+, product.code AS product_code
+, product.fullproductname AS product_name
+, lot.lotcode AS lot_code
+, lot.expirationdate
 , line_item.quantity
 , reason.name AS reason_name
+, line_item.occurreddate
 , reason.reasoncategory
+, program.id AS program_id
 , program.name AS program_name
 , program.code AS program_code
+, facility.id AS facility_id
 , facility.name AS facility_name
+, district.id AS district_id
 , district.name AS district_name
-, geo_level.name AS region_name
-, lot.lotcode
-, product.fullproductname as product
-, null as username
+, region.id AS region_id
+, region.name AS region_name
+, country.id AS country_id
+, country.name AS country_name
+, facility_type.id AS facility_type_id
+, facility_type.name AS facility_type_name
 FROM kafka_stock_cards card
 LEFT JOIN kafka_stock_card_line_items line_item ON card.id = line_item.stockcardid
 LEFT JOIN kafka_stock_card_line_item_reasons reason ON line_item.reasonid = reason.id
-LEFT JOIN kafka_orderables product ON card.orderableid = product.id
-LEFT JOIN kafka_lots lot ON card.lotid = lot.id
-LEFT JOIN kafka_programs program ON card.programid = program.id
-LEFT JOIN kafka_facilities facility ON card.facilityid = facility.id
-LEFT JOIN kafka_geographic_zones district ON facility.geographiczoneid = district.id
-LEFT JOIN kafka_geographic_levels geo_level ON district.levelid = geo_level.id
-UNION
-SELECT 
-null
-, null
-, null
-, null
-, kp.name as program_name
-, null
-, f.name as facility_name
-, gz.name as district_name
-, kgl.name as region_name
-, null
-, null
-, u.username
-FROM kafka_right_assignments kra
-LEFT JOIN kafka_users u ON u.id = kra.userid
-LEFT JOIN kafka_facilities f on f.id = kra.facilityid
-LEFT JOIN kafka_facility_types ft ON ft.id = f.typeid
-LEFT JOIN public.kafka_geographic_zones gz on gz.id = f.geographiczoneid
-LEFT JOIN kafka_geographic_levels kgl on kgl.id = gz.levelid 
-LEFT JOIN kafka_programs kp on kp.id = kra.programid
-WHERE facilityid IS NOT NULL AND programid IS NOT null
-and rightname in ('STOCK_CARDS_VIEW')
+LEFT JOIN kafka_orderables product ON card.orderableid::text = product.id::text
+LEFT JOIN kafka_lots lot ON card.lotid::text = lot.id::text
+LEFT JOIN kafka_programs program ON card.programid::text = program.id::text
+LEFT JOIN kafka_facilities facility ON card.facilityid::text = facility.id::text
+LEFT JOIN kafka_geographic_zones district ON district.id::text = facility.geographiczoneid::text
+LEFT JOIN kafka_geographic_zones region ON region.id::text = district.parentid::text
+LEFT JOIN kafka_geographic_zones country ON country.id::text = region.parentid::text
+LEFT JOIN kafka_facility_types facility_type ON facility_type.id::text = facility.typeid::text
 WITH DATA;
 
 ALTER MATERIALIZED VIEW stock_adjustments_view OWNER TO postgres;
