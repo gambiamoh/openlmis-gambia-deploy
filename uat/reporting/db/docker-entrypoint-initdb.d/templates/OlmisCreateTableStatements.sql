@@ -19,6 +19,16 @@ CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 COMMENT ON EXTENSION postgis IS 'PostGIS geometry, geography, and raster spatial types and functions';
 
 --
+-- DROP MATERIALIZED VIEWS
+--
+DROP MATERIALIZED VIEW stock_adjustments_view;
+DROP MATERIALIZED VIEW stock_status_and_consumption;
+DROP MATERIALIZED VIEW adjustments;
+DROP MATERIALIZED VIEW reporting_rate_and_timeliness;
+DROP MATERIALIZED VIEW view_facility_access;
+DROP MATERIALIZED VIEW facilities;
+
+--
 -- Name: commodity_types; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -2062,7 +2072,6 @@ ALTER TABLE reporting_dates OWNER TO postgres;
 ---
 --- Name: view_facility_access; Type: TABLE; Schema: public; Owner: postgres
 ---
-DROP MATERIALIZED VIEW view_facility_access;
 
 CREATE MATERIALIZED VIEW view_facility_access AS
 SELECT DISTINCT u.username, facilityid, kf.name as facility_name, programid, kp.name as program_name, rightname,
@@ -2085,7 +2094,6 @@ ALTER MATERIALIZED VIEW view_facility_access OWNER TO postgres;
 ---
 --- Name: reporting_rate_and_timeliness; Type: TABLE; Schema: public; Owner: postgres
 ---
-DROP MATERIALIZED VIEW reporting_rate_and_timeliness;
 
 CREATE MATERIALIZED VIEW reporting_rate_and_timeliness AS
 SELECT f.name
@@ -2200,7 +2208,6 @@ ALTER MATERIALIZED VIEW reporting_rate_and_timeliness OWNER TO postgres;
 ---
 --- Name: adjustments; Type: TABLE; Schema: public; Owner: postgres
 ---
-DROP MATERIALIZED VIEW adjustments;
 
 CREATE MATERIALIZED VIEW adjustments AS
 SELECT rli.id AS requisition_line_item_id
@@ -2260,7 +2267,6 @@ ALTER MATERIALIZED VIEW adjustments OWNER TO postgres;
 ---
 --- Name: stock_status_and_consumption; Type: TABLE; Schema: public; Owner: postgres
 ---
-DROP MATERIALIZED VIEW stock_status_and_consumption;
 
 CREATE MATERIALIZED VIEW stock_status_and_consumption AS
 SELECT li.requisition_line_item_id
@@ -2417,8 +2423,6 @@ ALTER MATERIALIZED VIEW facilities OWNER TO postgres;
 ---
 --- Name: stock_adjustments_view; Type: TABLE; Schema: public; Owner: postgres
 ---
-
-DROP MATERIALIZED VIEW stock_adjustments_view;
 
 CREATE MATERIALIZED VIEW stock_adjustments_view AS
 SELECT DISTINCT line_item.id
