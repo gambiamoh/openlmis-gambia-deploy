@@ -21,12 +21,12 @@ COMMENT ON EXTENSION postgis IS 'PostGIS geometry, geography, and raster spatial
 --
 -- DROP MATERIALIZED VIEWS
 --
-DROP MATERIALIZED VIEW stock_adjustments_view;
-DROP MATERIALIZED VIEW stock_status_and_consumption;
-DROP MATERIALIZED VIEW adjustments;
-DROP MATERIALIZED VIEW reporting_rate_and_timeliness;
-DROP MATERIALIZED VIEW view_facility_access;
-DROP MATERIALIZED VIEW facilities;
+DROP MATERIALIZED VIEW IF EXISTS stock_adjustments_view;
+DROP MATERIALIZED VIEW IF EXISTS stock_status_and_consumption;
+DROP MATERIALIZED VIEW IF EXISTS adjustments;
+DROP MATERIALIZED VIEW IF EXISTS reporting_rate_and_timeliness;
+DROP MATERIALIZED VIEW IF EXISTS view_facility_access;
+DROP MATERIALIZED VIEW IF EXISTS facilities;
 
 --
 -- Name: commodity_types; Type: TABLE; Schema: public; Owner: postgres
@@ -1729,7 +1729,6 @@ ALTER TABLE public.kafka_template_parameters OWNER TO postgres;
 --
 -- Name: stock_cards; Type: TABLE; Schema: public; Owner: postgres
 --
-DROP TABLE IF EXISTS public.kafka_stock_cards;
 
 CREATE TABLE public.kafka_stock_cards (
     id uuid NOT NULL,
@@ -1748,7 +1747,6 @@ ALTER TABLE public.kafka_stock_cards OWNER TO postgres;
 --
 -- Name: stock_card_line_items; Type: TABLE; Schema: public; Owner: postgres
 --
-DROP TABLE IF EXISTS public.kafka_stock_card_line_items;
 
 CREATE TABLE public.kafka_stock_card_line_items (
     id uuid NOT NULL,
@@ -1766,7 +1764,7 @@ CREATE TABLE public.kafka_stock_card_line_items (
     reasonid uuid, 
     sourceid uuid, 
     stockcardid uuid NOT NULL, 
-    extradata jasonb
+    extradata jsonb
 );
 
 
@@ -2054,7 +2052,7 @@ CREATE UNIQUE INDEX stock_card_facility_program_orderable ON public.kafka_stock_
 -- Name: stock_card_line_items_stock_idx; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX stock_card_line_items_stock_idx ON public.stock_card_line_items USING btree (stockcardid);
+CREATE INDEX stock_card_line_items_stock_idx ON public.kafka_stock_card_line_items USING btree (stockcardid);
 
 
 --
