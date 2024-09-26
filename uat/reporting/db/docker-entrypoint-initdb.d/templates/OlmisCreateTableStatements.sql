@@ -1543,7 +1543,12 @@ CREATE TABLE public.kafka_requisition_line_items (
     additionalquantityrequired integer,
     orderableversionnumber bigint,
     facilitytypeapprovedproductid uuid,
-    facilitytypeapprovedproductversionnumber bigint
+    facilitytypeapprovedproductversionnumber bigint,
+    numberofpatientsontreatmentnextmonth integer,
+    totalrequirement integer,
+    totalquantityneededbyhf integer,
+    quantitytoissue integer,
+    convertedquantitytoissue integer
 );
 
 
