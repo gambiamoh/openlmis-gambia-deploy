@@ -2045,8 +2045,10 @@ CREATE INDEX status_changes_requisitionid_idx ON public.kafka_status_changes USI
 -- Name: stock_card_facility_program_orderable; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE UNIQUE INDEX stock_card_facility_program_orderable ON public.kafka_stock_cards USING btree (facilityid, programid, orderableid);
-
+CREATE INDEX stock_card_facility_program_orderable ON public.kafka_stock_cards USING btree
+    (facilityid, programid, orderableid) WHERE lotid IS NULL;
+CREATE INDEX stock_card_facility_program_orderable_lotId ON public.kafka_stock_cards USING btree
+    (facilityid, programid, orderableid, lotid) WHERE lotid IS NOT NULL;
 
 --
 -- Name: stock_card_line_items_stock_idx; Type: INDEX; Schema: public; Owner: postgres
