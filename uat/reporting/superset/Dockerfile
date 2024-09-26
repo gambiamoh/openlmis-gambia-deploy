@@ -93,6 +93,9 @@ ENV PATH=$NVM_DIR/versions/node/$NODE_VERSION/bin:$PATH
 RUN node -v
 RUN npm -v
 
+# Copy OpenLMIS Customization
+COPY app-customizations/$SUPERSET_VERSION $APP_DIR
+
 # Installing dependecies via npm
 RUN npm install -g po2json
 
@@ -106,7 +109,7 @@ RUN wget -P /tmp https://github.com/apache/superset/archive/${SUPERSET_VERSION}.
     && rm -r /tmp/${SUPERSET_VERSION}.zip
 
 USER superset:superset
-RUN cd $APP_DIR/superset-frontend && npm ci
+RUN cd $APP_DIR/superset-frontend && npm ci && npm run build && cp -r ../superset/static/assets ../static
 
 # Deploy application
 EXPOSE 8088
