@@ -2242,9 +2242,6 @@ SELECT rli.id AS requisition_line_item_id
   , sa.id AS adjustment_lines_id
   , sa.quantity AS quantity
   , sar.name AS stock_adjustment_reason
-  , fa.facilityid AS facility
-  , fa.programid AS program
-  , fa.username AS username
 FROM kafka_requisitions r
   LEFT JOIN kafka_requisition_line_items rli ON rli.requisitionid = r.id
   LEFT JOIN kafka_supervisory_nodes sn ON sn.id = r.supervisorynodeid
@@ -2260,10 +2257,9 @@ FROM kafka_requisitions r
   LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = latest_orderables.id AND oi.orderableversionnumber = latest_orderables.versionnumber AND oi.key = 'tradeItem'
   LEFT JOIN (SELECT DISTINCT ON (requisitionid) id, requisitionid, status, authorid, createddate FROM kafka_status_changes ORDER BY requisitionid, createddate DESC) final_status_changes ON final_status_changes.requisitionid = r.id
   LEFT JOIN kafka_stock_adjustments sa ON sa.requisitionlineitemid = rli.id
-  LEFT JOIN kafka_stock_adjustment_reasons sar ON sar.id = sa.reasonid AND sar.requisitionid = r.id
-  LEFT JOIN view_facility_access fa ON fa.facilityid = r.facilityid AND fa.programid = r.programid and fa.rightname = 'REQUISITION_VIEW'
+  LEFT JOIN kafka_stock_adjustment_reasons sar ON sar.reasonid = sa.reasonid AND sar.requisitionid = r.id
 WHERE final_status_changes.status NOT IN ('SKIPPED', 'INITIATED', 'SUBMITTED')
-ORDER BY rli.id, fa.username, r.modifieddate DESC NULLS LAST
+ORDER BY rli.id, r.modifieddate DESC NULLS LAST
 WITH DATA;
 
 ALTER MATERIALIZED VIEW adjustments OWNER TO postgres;

@@ -48,7 +48,8 @@ RUN useradd -U -m superset && \
         libffi-dev \
         python-dev \
         libsasl2-dev \
-        libldap2-dev && \
+        libldap2-dev \
+        libecpg-dev && \
     apt-get clean && \
     rm -r /var/lib/apt/lists/* && \
     pip install --upgrade setuptools "pip<24.1" && \
