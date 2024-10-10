@@ -2351,8 +2351,8 @@ FROM kafka_requisitions r
   LEFT JOIN (SELECT DISTINCT ON (rli.id) rli.id AS requisition_line_item_id
       , requisitionid AS requisition_id
       , rli.orderableid AS orderable_id
-      , latest_orderables.code AS product_code
-      , latest_orderables.fullproductname AS full_product_name
+      , orderables.code AS product_code
+      , orderables.fullproductname AS full_product_name
       , oi.value AS trade_item_id
       , beginningbalance AS beginning_balance
       , totalconsumedquantity AS total_consumed_quantity
@@ -2385,13 +2385,13 @@ FROM kafka_requisitions r
         ELSE 'Adequately stocked'
       END as stock_status
     FROM kafka_requisition_line_items rli
-      LEFT JOIN (SELECT DISTINCT ON (id) id, code, fullproductname, versionnumber FROM kafka_orderables ORDER BY id, versionnumber DESC) latest_orderables ON latest_orderables.id = rli.orderableid AND latest_orderables.versionnumber = rli.orderableversionnumber
-      LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = latest_orderables.id AND oi.orderableversionnumber = latest_orderables.versionnumber AND oi.key = 'tradeItem'
+      LEFT JOIN kafka_orderables orderables ON orderables.id = rli.orderableid AND orderables.versionnumber = rli.orderableversionnumber
+      LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = orderables.id AND oi.orderableversionnumber = orderables.versionnumber AND oi.key = 'tradeItem'
     GROUP BY rli.id
       , requisitionid
       , rli.orderableid
-      , latest_orderables.code
-      , latest_orderables.fullproductname
+      , orderables.code
+      , orderables.fullproductname
       , oi.value
       , beginningbalance
       , totalconsumedquantity
