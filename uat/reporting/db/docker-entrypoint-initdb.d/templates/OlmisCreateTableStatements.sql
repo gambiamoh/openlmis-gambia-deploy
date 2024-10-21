@@ -2459,6 +2459,7 @@ LEFT JOIN kafka_geographic_zones district ON district.id::text = facility.geogra
 LEFT JOIN kafka_geographic_zones region ON region.id::text = district.parentid::text
 LEFT JOIN kafka_geographic_zones country ON country.id::text = region.parentid::text
 LEFT JOIN kafka_facility_types facility_type ON facility_type.id::text = facility.typeid::text
+WHERE reason.reasoncategory = 'ADJUSTMENT'
 WITH DATA;
 
 ALTER MATERIALIZED VIEW stock_adjustments_view OWNER TO postgres;
