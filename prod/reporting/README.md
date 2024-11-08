@@ -20,7 +20,7 @@
   ```sh
   docker-compose up --build -d
   ```
-  * You might, at times, want to take down the stack including all the created volumes. We recommend you do this if you ever change configurations in either the [./db](db) or [./config](config) directories:
+  * You might, at times, want to take down the stack including all the created volumes. We recommend you do this if you ever change configurations in either the [./db](./db) or [./config](./config) directories:
 
   ```sh
   docker-compose down -v
@@ -34,24 +34,6 @@
 8.  If you have an OpenLMIS user with the proper permissions, you can also log in to OpenLMIS and navigate to `https://<OpenLMIS Domain>/#!/reports/list` and then select a report that uses the reporting stack (e.g. stockouts) to access Superset from OpenLMIS. This will require authorizing Superset by following the on-screen instructions.
 
 9. You should be able to access NiFi by navigating to the `NIFI_DOMAIN_NAME`, if you set it up.
-
-## Upgrading Superset to a new version
-
-Upgrading Superset to new version consist of two steps:
-1. Updating configuration volume with latest Superset configuration and customization files.
-1. Building and starting a new Docker image with the upgraded version.
-
-##### Updating configuration volume
-
-The `./upgrade-superset-config.sh` script can be used to update the configuration volume in one go. 
-It must be executed on the Superset's Docker host system. 
-The scripts starts a 'dummy' container linked ot the config volume, and copies (with override) the new content
-of `./config/services/superset`.
-
-##### Running new Docker image
-
-There are no special considerations. 
-Start and build the Docker image included in this project as described in **Deploying to a Server** section.
 
 ## OAuth User for Superset
 

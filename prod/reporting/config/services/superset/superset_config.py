@@ -47,10 +47,14 @@ OAUTH_PROVIDERS = [
             },
             'api_base_url': '%s/api/oauth' % os.environ['OL_BASE_URL'],
             'access_token_url': '%s/api/oauth/token?grant_type=authorization_code' % os.environ['OL_BASE_URL'],
-            'authorize_url': '%s/api/oauth/authorize?' % os.environ['OL_BASE_URL']
+            'authorize_url': '%s/api/oauth/authorize?' % os.environ['OL_BASE_URL'],
+            'custom_redirect_url': '%s/oauth-authorized/openlmis?' % os.environ['SUPERSET_URL']
         }
     }
 ]
+
+# Set URL scheme for superset-patchup redirect URLs
+PREFERRED_URL_SCHEME = "https"
 
 # The default user self registration role
 AUTH_USER_REGISTRATION_ROLE = "OLMIS_Gamma"

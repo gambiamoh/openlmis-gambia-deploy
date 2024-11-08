@@ -19,6 +19,16 @@ CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 COMMENT ON EXTENSION postgis IS 'PostGIS geometry, geography, and raster spatial types and functions';
 
 --
+-- DROP MATERIALIZED VIEWS
+--
+DROP MATERIALIZED VIEW IF EXISTS stock_adjustments_view;
+DROP MATERIALIZED VIEW IF EXISTS stock_status_and_consumption;
+DROP MATERIALIZED VIEW IF EXISTS adjustments;
+DROP MATERIALIZED VIEW IF EXISTS reporting_rate_and_timeliness;
+DROP MATERIALIZED VIEW IF EXISTS view_facility_access;
+DROP MATERIALIZED VIEW IF EXISTS facilities;
+
+--
 -- Name: commodity_types; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -128,7 +138,8 @@ CREATE TABLE public.kafka_facility_types (
     code text NOT NULL,
     description text,
     displayorder integer,
-    name text
+    name text,
+    primaryhealthcare boolean
 );
 
 
@@ -1532,7 +1543,12 @@ CREATE TABLE public.kafka_requisition_line_items (
     additionalquantityrequired integer,
     orderableversionnumber bigint,
     facilitytypeapprovedproductid uuid,
-    facilitytypeapprovedproductversionnumber bigint
+    facilitytypeapprovedproductversionnumber bigint,
+    numberofpatientsontreatmentnextmonth integer,
+    totalrequirement integer,
+    totalquantityneededbyhf integer,
+    quantitytoissue integer,
+    convertedquantitytoissue integer
 );
 
 
@@ -1603,7 +1619,8 @@ CREATE TABLE public.kafka_requisitions (
     datephysicalstockcountcompleted date,
     version bigint DEFAULT 0,
     reportonly boolean,
-    extradata jsonb
+    extradata jsonb,
+    patientsdata text
 );
 
 
@@ -1713,6 +1730,68 @@ CREATE TABLE public.kafka_template_parameters (
 
 
 ALTER TABLE public.kafka_template_parameters OWNER TO postgres;
+
+--
+-- Name: stock_cards; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kafka_stock_cards (
+    id uuid NOT NULL,
+    facilityid uuid NOT NULL,
+    lotid uuid, 
+    orderableid uuid NOT NULL, 
+    programid uuid NOT NULL, 
+    origineventid uuid NOT NULL, 
+    isshowed boolean, 
+    isactive boolean
+);
+
+
+ALTER TABLE public.kafka_stock_cards OWNER TO postgres;
+
+--
+-- Name: stock_card_line_items; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kafka_stock_card_line_items (
+    id uuid NOT NULL,
+    destinationfreetext character varying(255),
+    documentnumber character varying(255), 
+    occurreddate date NOT NULL, 
+    processeddate timestamp with time zone NOT NULL, 
+    quantity integer NOT NULL,
+    reasonfreetext character varying(255), 
+    signature character varying(255), 
+    sourcefreetext character varying(255), 
+    userid uuid NOT NULL, 
+    destinationid uuid, 
+    origineventid uuid NOT NULL, 
+    reasonid uuid, 
+    sourceid uuid, 
+    stockcardid uuid NOT NULL, 
+    extradata jsonb
+);
+
+
+ALTER TABLE public.kafka_stock_card_line_items OWNER TO postgres;
+
+
+--
+-- Name: stock_card_line_item_reasons; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.kafka_stock_card_line_item_reasons (
+    id uuid NOT NULL,
+    description text, 
+    isfreetextallowed boolean NOT NULL, 
+    name text NOT NULL, 
+    reasoncategory text NOT NULL, 
+    reasontype text NOT NULL
+);
+
+
+ALTER TABLE public.kafka_stock_card_line_item_reasons OWNER TO postgres;
+
 
 --
 -- Name: available_requisition_column_options available_requisition_column_options_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
@@ -1851,6 +1930,30 @@ ALTER TABLE ONLY public.kafka_jasper_templates
 
 
 --
+-- Name: stock_cards stock_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kafka_stock_cards
+    ADD CONSTRAINT stock_cards_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stock_card_line_items stock_card_line_items_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kafka_stock_card_line_items
+    ADD CONSTRAINT stock_card_line_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stock_card_line_item_reasons stock_card_line_item_reasons_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.kafka_stock_card_line_item_reasons
+    ADD CONSTRAINT stock_card_line_item_reasons_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: available_non_full_supply_products_requisitionid_idx; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -1944,6 +2047,22 @@ CREATE INDEX status_changes_requisitionid_idx ON public.kafka_status_changes USI
 
 
 --
+-- Name: stock_card_facility_program_orderable; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX stock_card_facility_program_orderable ON public.kafka_stock_cards USING btree
+    (facilityid, programid, orderableid) WHERE lotid IS NULL;
+CREATE INDEX stock_card_facility_program_orderable_lotId ON public.kafka_stock_cards USING btree
+    (facilityid, programid, orderableid, lotid) WHERE lotid IS NOT NULL;
+
+--
+-- Name: stock_card_line_items_stock_idx; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX stock_card_line_items_stock_idx ON public.kafka_stock_card_line_items USING btree (stockcardid);
+
+
+--
 -- Name: reporting_dates; Type: TABLE; Schema: referencedata; Owner: postgres
 --
 
@@ -1955,27 +2074,32 @@ CREATE TABLE reporting_dates (
 
 ALTER TABLE reporting_dates OWNER TO postgres;
 
--- Insert default values for reporting dates --
-INSERT INTO reporting_dates(due_days, late_days, country) 
-    VALUES(14, 7, 'Malawi'), (14, 7, 'Mozambique');
-
+---
+--- Name: view_facility_access; Type: TABLE; Schema: public; Owner: postgres
+---
 
 CREATE MATERIALIZED VIEW view_facility_access AS
-SELECT DISTINCT u.username, facilityid, programid
+SELECT DISTINCT u.username, facilityid, kf.name as facility_name, programid, kp.name as program_name, rightname,
+dgz.id as district_id, rgz.id as region_id, cgz.id as country_id, ft.id as facility_type_id,
+dgz.name as district_name, rgz.name as region_name, cgz.name as country_name, ft.name as facility_type_name
 FROM kafka_right_assignments ra
   LEFT JOIN kafka_users u ON u.id = ra.userid
-WHERE facilityid IS NOT NULL AND programid IS NOT NULL
-UNION
-SELECT DISTINCT 'admin', facilityid, programid
-FROM kafka_right_assignments ra
-  LEFT JOIN kafka_users u ON u.id = ra.userid
-WHERE facilityid IS NOT NULL AND programid IS NOT NULL AND u.username = 'administrator'
-;
+  LEFT JOIN kafka_facilities kf ON kf.id = ra.facilityid
+  left join kafka_programs kp on kp.id = programid
+  LEFT JOIN kafka_geographic_zones dgz ON dgz.id = kf.geographiczoneid
+  LEFT JOIN kafka_geographic_zones rgz ON rgz.id = dgz.parentid
+  LEFT JOIN kafka_geographic_zones cgz ON cgz.id = rgz.parentid
+  LEFT JOIN kafka_facility_types ft ON ft.id = kf.typeid
+WHERE facilityid IS NOT NULL AND programid IS NOT null
+AND rightname in ('REQUISITION_VIEW', 'STOCK_CARDS_VIEW')
+WITH DATA;
 
+ALTER MATERIALIZED VIEW view_facility_access OWNER TO postgres;
 
 ---
 --- Name: reporting_rate_and_timeliness; Type: TABLE; Schema: public; Owner: postgres
 ---
+
 CREATE MATERIALIZED VIEW reporting_rate_and_timeliness AS
 SELECT f.name
   , dgz.name AS district
@@ -2079,7 +2203,7 @@ FROM kafka_facilities f
   LEFT JOIN kafka_facility_operators fo ON fo.id = f.operatedbyid
   LEFT JOIN reporting_dates rd ON rd.country = cgz.name
   LEFT JOIN kafka_supported_programs sp ON sp.facilityid = f.id AND sp.programid = final_authorized_requisitions.program_id
-  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = final_authorized_requisitions.program_id
+  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = final_authorized_requisitions.program_id AND rightname = 'REQUISITION_VIEW'
 ORDER BY final_authorized_requisitions.processing_period_enddate DESC
 WITH DATA;
 
@@ -2089,6 +2213,7 @@ ALTER MATERIALIZED VIEW reporting_rate_and_timeliness OWNER TO postgres;
 ---
 --- Name: adjustments; Type: TABLE; Schema: public; Owner: postgres
 ---
+
 CREATE MATERIALIZED VIEW adjustments AS
 SELECT rli.id AS requisition_line_item_id
   , r.id AS requisition_id
@@ -2117,9 +2242,6 @@ SELECT rli.id AS requisition_line_item_id
   , sa.id AS adjustment_lines_id
   , sa.quantity AS quantity
   , sar.name AS stock_adjustment_reason
-  , fa.facilityid AS facility
-  , fa.programid AS program
-  , fa.username AS username
 FROM kafka_requisitions r
   LEFT JOIN kafka_requisition_line_items rli ON rli.requisitionid = r.id
   LEFT JOIN kafka_supervisory_nodes sn ON sn.id = r.supervisorynodeid
@@ -2135,10 +2257,9 @@ FROM kafka_requisitions r
   LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = latest_orderables.id AND oi.orderableversionnumber = latest_orderables.versionnumber AND oi.key = 'tradeItem'
   LEFT JOIN (SELECT DISTINCT ON (requisitionid) id, requisitionid, status, authorid, createddate FROM kafka_status_changes ORDER BY requisitionid, createddate DESC) final_status_changes ON final_status_changes.requisitionid = r.id
   LEFT JOIN kafka_stock_adjustments sa ON sa.requisitionlineitemid = rli.id
-  LEFT JOIN kafka_stock_adjustment_reasons sar ON sar.id = sa.reasonid AND sar.requisitionid = r.id
-  LEFT JOIN view_facility_access fa ON fa.facilityid = r.facilityid AND fa.programid = r.programid
+  LEFT JOIN kafka_stock_adjustment_reasons sar ON sar.reasonid = sa.reasonid AND sar.requisitionid = r.id
 WHERE final_status_changes.status NOT IN ('SKIPPED', 'INITIATED', 'SUBMITTED')
-ORDER BY rli.id, fa.username, r.modifieddate DESC NULLS LAST
+ORDER BY rli.id, r.modifieddate DESC NULLS LAST
 WITH DATA;
 
 ALTER MATERIALIZED VIEW adjustments OWNER TO postgres;
@@ -2147,6 +2268,7 @@ ALTER MATERIALIZED VIEW adjustments OWNER TO postgres;
 ---
 --- Name: stock_status_and_consumption; Type: TABLE; Schema: public; Owner: postgres
 ---
+
 CREATE MATERIALIZED VIEW stock_status_and_consumption AS
 SELECT li.requisition_line_item_id
   , r.id
@@ -2156,6 +2278,7 @@ SELECT li.requisition_line_item_id
   , r.supplyingfacilityid AS supplying_facility
   , r.supervisorynodeid AS supervisory_node
   , r.facilityid AS facility_id
+  , r.status AS req_status
   , f.code AS facility_code
   , f.name AS facility_name
   , f.active AS facilty_active_status
@@ -2204,13 +2327,6 @@ SELECT li.requisition_line_item_id
   , li.price_per_pack
   , li.total_cost
   , li.total_received_quantity
-  , sc.requisitionid AS status_req_id
-  , sc.status AS req_status
-  , sc.authorid AS author_id
-  , sc.createddate AS status_date
-  , fa.facilityid AS facility
-  , fa.programid AS program
-  , fa.username
   , li.closing_balance
   , li.amc
   , li.consumption
@@ -2222,7 +2338,6 @@ SELECT li.requisition_line_item_id
   , li.combined_stockout
   , li.stock_status
 FROM kafka_requisitions r 
-  LEFT JOIN kafka_status_changes sc ON sc.requisitionid = r.id
   LEFT JOIN kafka_facilities f ON f.id = r.facilityid
   LEFT JOIN kafka_geographic_zones dgz ON dgz.id = f.geographiczoneid
   LEFT JOIN kafka_geographic_zones rgz ON rgz.id = dgz.parentid
@@ -2233,12 +2348,11 @@ FROM kafka_requisitions r
   LEFT JOIN kafka_processing_periods pp ON pp.id = r.processingperiodid
   LEFT JOIN kafka_processing_schedules ps ON ps.id = pp.processingscheduleid
   LEFT JOIN reporting_dates rd ON rd.country = cgz.name
-  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = r.programid
   LEFT JOIN (SELECT DISTINCT ON (rli.id) rli.id AS requisition_line_item_id
       , requisitionid AS requisition_id
       , rli.orderableid AS orderable_id
-      , latest_orderables.code AS product_code
-      , latest_orderables.fullproductname AS full_product_name
+      , orderables.code AS product_code
+      , orderables.fullproductname AS full_product_name
       , oi.value AS trade_item_id
       , beginningbalance AS beginning_balance
       , totalconsumedquantity AS total_consumed_quantity
@@ -2271,13 +2385,13 @@ FROM kafka_requisitions r
         ELSE 'Adequately stocked'
       END as stock_status
     FROM kafka_requisition_line_items rli
-      LEFT JOIN (SELECT DISTINCT ON (id) id, code, fullproductname, versionnumber FROM kafka_orderables ORDER BY id, versionnumber DESC) latest_orderables ON latest_orderables.id = rli.orderableid AND latest_orderables.versionnumber = rli.orderableversionnumber
-      LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = latest_orderables.id AND oi.orderableversionnumber = latest_orderables.versionnumber AND oi.key = 'tradeItem'
+      LEFT JOIN kafka_orderables orderables ON orderables.id = rli.orderableid AND orderables.versionnumber = rli.orderableversionnumber
+      LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = orderables.id AND oi.orderableversionnumber = orderables.versionnumber AND oi.key = 'tradeItem'
     GROUP BY rli.id
       , requisitionid
       , rli.orderableid
-      , latest_orderables.code
-      , latest_orderables.fullproductname
+      , orderables.code
+      , orderables.fullproductname
       , oi.value
       , beginningbalance
       , totalconsumedquantity
@@ -2308,347 +2422,44 @@ WITH DATA;
 ALTER MATERIALIZED VIEW facilities OWNER TO postgres;
 
 ---
---- Name: stock_status_and_consumption; Type: TABLE; Schema: public; Owner: postgres
+--- Name: stock_adjustments_view; Type: TABLE; Schema: public; Owner: postgres
 ---
 
-DROP MATERIALIZED VIEW IF EXISTS stock_status_and_consumption;
-CREATE MATERIALIZED VIEW stock_status_and_consumption AS
-SELECT li.requisition_line_item_id
-  , r.id
-  , r.createddate AS req_created_date
-  , r.modifieddate AS modified_date
-  , r.emergency AS emergency_status
-  , r.supplyingfacilityid AS supplying_facility
-  , r.supervisorynodeid AS supervisory_node
-  , r.facilityid AS facility_id
-  , f.code AS facility_code
-  , f.name AS facility_name
-  , f.active AS facilty_active_status
-  , dgz.id AS district_id
-  , dgz.code AS district_code
-  , dgz.name AS district_name
-  , rgz.id AS region_id
-  , rgz.code AS region_code
-  , rgz.name AS region_name
-  , cgz.id AS country_id
-  , cgz.code AS country_code
-  , cgz.name AS country_name
-  , ft.id AS facility_type_id
-  , ft.code AS facility_type_code
-  , ft.name AS facility_type_name
-  , fo.id AS facility_operator_id
-  , fo.code AS facility_operator_code
-  , fo.name AS facility_operator_name
-  , p.id AS program_id
-  , p.code AS program_code
-  , p.name AS program_name
-  , p.active AS program_active_status
-  , pp.id AS processing_period_id
-  , pp.name AS processing_period_name
-  , pp.startdate AS processing_period_startdate
-  , pp.enddate AS processing_period_enddate
-  , ps.id AS processing_schedule_id
-  , ps.code AS processing_schedule_code
-  , ps.name AS processing_schedule_name
-  , li.requisition_id AS li_req_id
-  , li.orderable_id
-  , li.product_code
-  , li.full_product_name
-  , li.trade_item_id
-  , li.beginning_balance
-  , li.total_consumed_quantity
-  , li.average_consumption
-  , li.total_losses_and_adjustments
-  , li.stock_on_hand
-  , li.total_stockout_days
-  , li.max_periods_of_stock
-  , li.calculated_order_quantity
-  , li.requested_quantity
-  , li.approved_quantity
-  , li.packs_to_ship
-  , li.price_per_pack
-  , li.total_cost
-  , li.total_received_quantity
-  , sc.requisitionid AS status_req_id
-  , sc.status AS req_status
-  , sc.authorid AS author_id
-  , sc.createddate AS status_date
-  , fa.facilityid AS facility
-  , fa.programid AS program
-  , fa.username
-  , li.closing_balance
-  , li.amc
-  , li.consumption
-  , li.adjusted_consumption
-  , li.order_quantity
-  , f.enabled as facility_status
-  , rd.due_days
-  , rd.late_days
-  , li.combined_stockout
-  , li.stock_status,
-  mama.*
-FROM kafka_requisitions r
-  LEFT JOIN kafka_status_changes sc ON sc.requisitionid = r.id
-  LEFT JOIN kafka_facilities f ON f.id = r.facilityid
-  LEFT JOIN kafka_geographic_zones dgz ON dgz.id = f.geographiczoneid
-  LEFT JOIN kafka_geographic_zones rgz ON rgz.id = dgz.parentid
-  LEFT JOIN kafka_geographic_zones cgz ON cgz.id = rgz.parentid
-  LEFT JOIN kafka_facility_types ft ON ft.id = f.typeid
-  LEFT JOIN kafka_facility_operators fo ON fo.id = f.operatedbyid
-  LEFT JOIN kafka_programs p ON p.id = r.programid
-  LEFT JOIN kafka_processing_periods pp ON pp.id = r.processingperiodid
-  LEFT JOIN kafka_processing_schedules ps ON ps.id = pp.processingscheduleid
-  LEFT JOIN reporting_dates rd ON rd.country = cgz.name
-  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = r.programid 
- -- LEFT JOIN kafka_requisition_line_items item ON r.id = item.requisitionid 
-    LEFT JOIN (
-select s.programid, f.id facId, f.name facilityName2, grp.name requisitionGroupname, sn.name supplying_facility2 from kafka_supervisory_nodes SN
-JOIN kafka_requisition_groups grp ON grp.supervisorynodeid  = sn.id
-JOIN kafka_requisition_group_members  M ON grp.id = m.requisitiongroupid
-JOIN KAFKA_FACILITIES F ON m.facilityid  = f.id
-JOIN KAFKA_FACILITY_TYPES FT on F.typeid = ft.id
-JOIN  kafka_requisition_group_program_schedules S on GRP.ID = s.requisitiongroupid
-WHERE FT.code NOT IN('CMS') and SN.NAME NOT IN('Central Medical Store SN')
-  ) mama on facId = F.ID and mama.programid = R.programid
-  LEFT JOIN (SELECT DISTINCT ON (rli.id) rli.id AS requisition_line_item_id
-      , requisitionid AS requisition_id
-      , rli.orderableid AS orderable_id
-      , latest_orderables.code AS product_code
-      , latest_orderables.fullproductname AS full_product_name
-      , oi.value AS trade_item_id
-      , beginningbalance AS beginning_balance
-      , totalconsumedquantity AS total_consumed_quantity
-      , averageconsumption AS average_consumption
-      , totallossesandadjustments AS total_losses_and_adjustments
-      , stockonhand AS stock_on_hand
-      , totalstockoutdays AS total_stockout_days
-      , maxperiodsofstock AS max_periods_of_stock
-      , calculatedorderquantity AS calculated_order_quantity
-      , requestedquantity AS requested_quantity
-      , approvedquantity AS approved_quantity
-      , packstoship AS packs_to_ship
-      , priceperpack AS price_per_pack
-      , totalcost AS total_cost
-      , totalreceivedquantity AS total_received_quantity
-      , SUM(stockonhand) AS closing_balance
-      , SUM(averageconsumption) AS amc
-      , SUM(totalconsumedquantity) AS consumption
-      , SUM(adjustedconsumption) AS adjusted_consumption
-      , SUM(approvedquantity) AS order_quantity
-      , CASE
-        WHEN (SUM(stockonhand) = 0 OR SUM(totalstockoutdays) > 0 OR SUM(beginningbalance) = 0 OR SUM(maxperiodsofstock) = 0) THEN 1
-        ELSE 0
-      END as combined_stockout,
-           CASE
-           WHEN rli.stockonhand = 0 THEN 'Stocked Out'::text
-           ELSE
-               CASE
-                   WHEN rli.averageconsumption > 0 AND rli.stockonhand > 0 THEN
-                       CASE
-                           WHEN round(rli.stockonhand::numeric / rli.averageconsumption::numeric,
-                                      2) <= 1 THEN 'Understocked'::text
-                           WHEN round(rli.stockonhand::numeric / rli.averageconsumption::numeric,
-                                      2) >= 1 AND
-                                round(rli.stockonhand::numeric / rli.averageconsumption::numeric,
-                                      2) <= maxperiodsofstock::numeric THEN 'Adequately stocked'::text
-                           WHEN round(rli.stockonhand::numeric / rli.averageconsumption::numeric,
-                                      2) > maxperiodsofstock::numeric THEN 'Overstocked'::text
-                           ELSE NULL::text
-                           END
-                   ELSE 'Unknown'::text
-                   END
-           END  as stock_status
-    FROM kafka_requisition_line_items rli
-      LEFT JOIN (SELECT DISTINCT ON (id) id, code, fullproductname, versionnumber FROM kafka_orderables ORDER BY id, versionnumber DESC) latest_orderables ON latest_orderables.id = rli.orderableid AND latest_orderables.versionnumber = rli.orderableversionnumber
-      LEFT JOIN kafka_orderable_identifiers oi ON oi.orderableid = latest_orderables.id AND oi.orderableversionnumber = latest_orderables.versionnumber AND oi.key = 'tradeItem'
-    GROUP BY rli.id
-      , requisitionid
-      , rli.orderableid
-      , latest_orderables.code
-      , latest_orderables.fullproductname
-      , oi.value
-      , beginningbalance
-      , totalconsumedquantity
-      , averageconsumption
-      , totallossesandadjustments
-      , stockonhand
-      , totalstockoutdays
-      , maxperiodsofstock
-      , calculatedorderquantity
-      , requestedquantity
-      , approvedquantity
-      , packstoship
-      , priceperpack
-      , totalcost
-      , totalreceivedquantity) li ON li.requisition_id = r.id
-      where requisition_line_item_id is not null  and beginning_balance >= 0
-      
-      WITH DATA;
-  ALTER MATERIALIZED VIEW stock_status_and_consumption OWNER TO postgres;
+CREATE MATERIALIZED VIEW stock_adjustments_view AS
+SELECT DISTINCT line_item.id
+, product.code AS product_code
+, product.fullproductname AS product_name
+, lot.lotcode AS lot_code
+, lot.expirationdate
+, line_item.quantity
+, reason.name AS reason_name
+, line_item.occurreddate
+, reason.reasoncategory
+, program.id AS program_id
+, program.name AS program_name
+, program.code AS program_code
+, facility.id AS facility_id
+, facility.name AS facility_name
+, district.id AS district_id
+, district.name AS district_name
+, region.id AS region_id
+, region.name AS region_name
+, country.id AS country_id
+, country.name AS country_name
+, facility_type.id AS facility_type_id
+, facility_type.name AS facility_type_name
+FROM kafka_stock_cards card
+LEFT JOIN kafka_stock_card_line_items line_item ON card.id = line_item.stockcardid
+LEFT JOIN kafka_stock_card_line_item_reasons reason ON line_item.reasonid = reason.id
+LEFT JOIN kafka_orderables product ON card.orderableid::text = product.id::text
+LEFT JOIN kafka_lots lot ON card.lotid::text = lot.id::text
+LEFT JOIN kafka_programs program ON card.programid::text = program.id::text
+LEFT JOIN kafka_facilities facility ON card.facilityid::text = facility.id::text
+LEFT JOIN kafka_geographic_zones district ON district.id::text = facility.geographiczoneid::text
+LEFT JOIN kafka_geographic_zones region ON region.id::text = district.parentid::text
+LEFT JOIN kafka_geographic_zones country ON country.id::text = region.parentid::text
+LEFT JOIN kafka_facility_types facility_type ON facility_type.id::text = facility.typeid::text
+WHERE reason.reasoncategory = 'ADJUSTMENT'
+WITH DATA;
 
-DROP MATERIALIZED VIEW reporting_rate_and_timeliness;
-
-CREATE MATERIALIZED VIEW reporting_rate_and_timeliness AS 
- 
- SELECT  z.totalExpected as expeccted2, case WHEN reporting_timeliness = 'Non Reporting' THEN 1 else 0 end as noReporting,
-case WHEN reporting_timeliness = 'On time' THEN 1 else 0 end as onTime,
-case WHEN reporting_timeliness = 'Late' THEN 1 else 0  end as late, * FROM (
-
- 
-  SELECT f.name
-  , dgz.name AS district
-  , rgz.name AS region
-  , cgz.name AS country
-  , ft.name AS facility_type_name
-  , fo.name AS operator_name
-  , f.active AS facility_active_status
-  , final_authorized_requisitions.requisition_id AS req_id
-  , final_authorized_requisitions.facility_id
-  , final_authorized_requisitions.program_id
-  , final_authorized_requisitions.program_name
-  , final_authorized_requisitions.program_active_status
-  , final_authorized_requisitions.processing_period_id
-  , final_authorized_requisitions.processing_period_name
-  , final_authorized_requisitions.processing_schedule_name
-  , final_authorized_requisitions.processing_period_startdate
-  , final_authorized_requisitions.processing_period_enddate
-  , final_authorized_requisitions.emergency_status
-  , final_authorized_requisitions.created_date
-  , final_authorized_requisitions.modified_date
-  , sp.programid AS supported_program
-  , sp.active AS supported_program_active
-  , sp.startdate AS supported_program_startdate
-  , final_authorized_requisitions.status_change_date
-  , fa.facilityid AS facility
-  , fa.programid AS program
-  , fa.username, totalExpected,
-  mama.*
-  , CASE
-    WHEN final_authorized_requisitions.status_change_date::DATE <= (final_authorized_requisitions.processing_period_enddate::DATE + rd.due_days::INT) 
-      AND final_authorized_requisitions.status = 'AUTHORIZED' THEN 'On time'
-    --WHEN final_authorized_requisitions.status_change_date::DATE > (final_authorized_requisitions.processing_period_enddate::DATE + rd.due_days::INT + rd.late_days::INT) 
-    --  AND final_authorized_requisitions.status = 'AUTHORIZED' THEN 'Unscheduled'
-    WHEN final_authorized_requisitions.status_change_date::DATE < (final_authorized_requisitions.processing_period_enddate::DATE + rd.due_days::INT + rd.late_days::INT) 
-      AND final_authorized_requisitions.status_change_date::DATE >= (final_authorized_requisitions.processing_period_enddate::DATE + rd.due_days::INT) 
-      AND final_authorized_requisitions.status = 'AUTHORIZED' THEN 'Late'
-    ELSE 'Non Reporting'
-  END AS reporting_timeliness,
-  'HEALTH FACILITIES and HOSPITALS' as level,
-  to_char(final_authorized_requisitions.processing_period_enddate::timestamp, 'yyyy') as year,
-  final_authorized_requisitions.processing_schedule_id as schedule
-FROM kafka_facilities f
-  LEFT JOIN (SELECT ranked_authorized_requisitions.requisition_id
-      , ranked_authorized_requisitions.facility_id
-      , ranked_authorized_requisitions.program_id
-      , ranked_authorized_requisitions.program_name
-      , ranked_authorized_requisitions.program_active_status
-      , ranked_authorized_requisitions.processing_period_id
-      , ranked_authorized_requisitions.processing_period_name
-      , ranked_authorized_requisitions.processing_schedule_name
-      , ranked_authorized_requisitions.processing_period_startdate
-      , ranked_authorized_requisitions.processing_period_enddate
-      , ranked_authorized_requisitions.emergency_status
-      , ranked_authorized_requisitions.created_date
-      , ranked_authorized_requisitions.modified_date
-      , ranked_authorized_requisitions.status
-      , ranked_authorized_requisitions.status_change_date
-      , ranked_authorized_requisitions.rank
-      ,ranked_authorized_requisitions.processing_schedule_id
-    FROM (SELECT authorized_requisitions.requisition_id
-        , authorized_requisitions.facility_id
-        , authorized_requisitions.program_id
-        , authorized_requisitions.program_name
-        , authorized_requisitions.program_active_status
-        , authorized_requisitions.processing_period_id
-        , authorized_requisitions.processing_period_name
-        , authorized_requisitions.processing_schedule_name
-        , authorized_requisitions.processing_period_startdate
-        , authorized_requisitions.processing_period_enddate
-        , authorized_requisitions.emergency_status
-        , authorized_requisitions.created_date
-        , authorized_requisitions.modified_date
-        , authorized_requisitions.status
-        , authorized_requisitions.status_change_date
-        , rank() OVER (PARTITION BY authorized_requisitions.program_id, authorized_requisitions.facility_id, authorized_requisitions.processing_period_id ORDER BY authorized_requisitions.status_change_date DESC) AS rank
-        , authorized_requisitions.processing_schedule_id
-      FROM (SELECT r.id AS requisition_id
-          , r.facilityid AS facility_id
-          , r.programid AS program_id
-          , p.name AS program_name
-          , p.active AS program_active_status
-          , r.processingperiodid AS processing_period_id
-          , pp.name AS processing_period_name
-          , ps.name AS processing_schedule_name
-          , pp.startdate AS processing_period_startdate
-          , pp.enddate AS processing_period_enddate
-          , r.emergency AS emergency_status
-          , r.createddate AS created_date
-          , r.modifieddate AS modified_date
-          , authorized_status_changes.status
-          , authorized_status_changes.createddate AS status_change_date
-          ,pp.processingscheduleid as processing_schedule_id
-        FROM kafka_requisitions r
-          LEFT JOIN (SELECT sc.requisitionid, sc.status, sc.createddate
-            FROM kafka_status_changes sc
-            WHERE sc.status = 'AUTHORIZED') authorized_status_changes ON authorized_status_changes.requisitionid = r.id
-          LEFT JOIN kafka_programs p ON p.id = r.programid
-          LEFT JOIN kafka_processing_periods pp ON pp.id = r.processingperiodid
-          LEFT JOIN kafka_processing_schedules ps ON ps.id = pp.processingscheduleid
-          LEFT JOIN kafka_requisition_group_members rgm ON rgm.facilityid = r.facilityid
-          LEFT JOIN kafka_requisition_group_program_schedules rgps
-              ON rgps.requisitiongroupid = rgm.requisitiongroupid AND rgps.programid = r.programid AND
-                 pp.processingscheduleid = rgps.processingscheduleid
-        ) authorized_requisitions
-      ORDER BY authorized_requisitions.facility_id, authorized_requisitions.processing_period_id, authorized_requisitions.status_change_date DESC) ranked_authorized_requisitions
-    WHERE ranked_authorized_requisitions.rank = 1) final_authorized_requisitions ON f.id = final_authorized_requisitions.facility_id
-  LEFT JOIN kafka_geographic_zones dgz ON dgz.id = f.geographiczoneid
-  LEFT JOIN kafka_geographic_zones rgz ON rgz.id = dgz.parentid
-  LEFT JOIN kafka_geographic_zones cgz ON cgz.id = rgz.parentid
-  LEFT JOIN kafka_facility_types ft ON ft.id = f.typeid
-  LEFT JOIN kafka_facility_operators fo ON fo.id = f.operatedbyid
-  LEFT JOIN reporting_dates rd ON rd.country = cgz.name
-  LEFT JOIN kafka_supported_programs sp ON sp.facilityid = f.id AND sp.programid = final_authorized_requisitions.program_id
-  LEFT JOIN view_facility_access fa ON fa.facilityid = f.id AND fa.programid = final_authorized_requisitions.program_id
-  LEFT JOIN (
-  
-select s.programid, f.id facId, f.name facilityName2, grp.name requisitionGroupname, sn.name supplying_facility from kafka_supervisory_nodes SN 
-
-JOIN kafka_requisition_groups grp ON grp.supervisorynodeid  = sn.id
- 
-JOIN kafka_requisition_group_members  M ON grp.id = m.requisitiongroupid
-
-JOIN KAFKA_FACILITIES F ON m.facilityid  = f.id
-
-JOIN  kafka_requisition_group_program_schedules S on GRP.ID = s.requisitiongroupid
-  
-  ) mama on facId = F.ID and mama.programid = final_authorized_requisitions.program_id
-
-  LEFT JOIN (
-SELECT
-       ps.programid,
-       pp.processingScheduleid scheduleid,
-       pp.id  periodid,
-       gzz.id regionid,
-       COUNT (*) totalExpected
-FROM kafka_facilities
-         JOIN kafka_supported_programs ps ON ps.facilityid = kafka_facilities.id
-         JOIN kafka_geographic_zones gz ON gz.id = kafka_facilities.geographiczoneid
-        JOIN kafka_geographic_zones gzz ON gz.parentid  = gzz.id
-         JOIN kafka_requisition_group_members rgm ON rgm.facilityid = kafka_facilities.id
-         JOIN kafka_requisition_group_program_schedules rgps
-              ON rgps.requisitiongroupid = rgm.requisitiongroupid AND rgps.programid = ps.programid
-         JOIN kafka_processing_periods pp ON pp.processingscheduleid = rgps.processingScheduleid
-          
-       --  WHERE gzz.name = 'Upper River Region' and PP.processingScheduleid= 'f734202d-0681-4e63-b0cf-fff49281ab66'
-      --   AND pp.ID ='648c6621-a37c-4cfc-991f-e14e3899ef9a'
-         
-        GROUP BY gzz.id, pp.processingScheduleid,  pp.id, ps.programid
-         )X ON rgz.id = X.regionid and x.scheduleid = final_authorized_requisitions.processing_schedule_id
-         and  X.periodid = final_authorized_requisitions.processing_period_id and 
-           final_authorized_requisitions.program_id = x.programid
-  
-  ORDER BY final_authorized_requisitions.processing_period_enddate 
-  
-  )z 
-  
- WITH DATA;
+ALTER MATERIALIZED VIEW stock_adjustments_view OWNER TO postgres;
