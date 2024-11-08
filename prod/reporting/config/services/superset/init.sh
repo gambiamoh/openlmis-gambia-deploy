@@ -9,12 +9,6 @@ set -e
 
 CONFIG_DIR="/etc/superset"
 
-# Custom code
-cp -rf $CONFIG_DIR/app-customizations/$SUPERSET_VERSION/* $APP_DIR &&
-
-# UI build
-$APP_DIR/superset-frontend/js_build.sh &&
-
 # wait for postgres
 until PGPASSWORD=$POSTGRES_PASSWORD psql -h "db" -p "5432" -U "$POSTGRES_USER" -d "open_lmis_reporting" -c '\q'; do
   >&2 echo "Postgres is unavailable - sleeping"
@@ -28,7 +22,7 @@ flask fab create-admin --username ${SUPERSET_ADMIN_USERNAME} --firstname Admin -
 
 superset db upgrade &&
 superset import_datasources -p $CONFIG_DIR/datasources/database.yaml &&
-superset import_dashboards -u ${SUPERSET_ADMIN_USERNAME} -p $CONFIG_DIR/dashboards/openlmis_uat_dashboards.zip &&
+superset import_dashboards -u ${SUPERSET_ADMIN_USERNAME} -p $CONFIG_DIR/dashboards/openlmis_gambia_dashboards.zip &&
 superset init &&
 
-gunicorn -w 2 --timeout 60 -b 0.0.0.0:8088 --reload --limit-request-line 0 --limit-request-field_size 0 "superset.app:create_app()"
+gunicorn $GUNICORN_CMD_ARGS "superset.app:create_app()"

@@ -5,7 +5,7 @@ services:
     command: /init.sh
     env_file: settings.env
     build:
-      context: config
+      context: ./config
     volumes:
       - config-volume:/config
 
@@ -54,7 +54,7 @@ services:
 
   db-service-configuration:
     build:
-      context: db
+      context: ./db
     volumes:
       - db-config-volume:/docker-entrypoint-initdb.d
 
@@ -73,7 +73,7 @@ services:
 
   cron-config:
     build:
-      context: cron
+      context: ./cron
     volumes:
       - cron-periodic-volume:/cron/periodic
 
@@ -155,7 +155,7 @@ services:
 
   superset:
     build:
-      context: superset
+      context: ./superset
       args:
         SUPERSET_VERSION: ${OL_SUPERSET_VERSION}
         SUPERSET_PATCHUP_VERSION: ${OL_SUPERSET_PATCHUP_VERSION}

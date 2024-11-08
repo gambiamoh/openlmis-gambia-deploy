@@ -1,38 +1,11 @@
 version: "3.3"
 
 services:
-  reverse-proxy:
-    restart: always
-    image: 'traefik:v2.8.3'
-    container_name: 'reverse-proxy'
-    command:
-      - '--api.insecure=true'
-      - '--entrypoints.web.address=:80'
-      - '--entrypoints.web.http.redirections.entryPoint.to=websecure'
-      - '--entrypoints.web.http.redirections.entryPoint.scheme=https'
-      - '--entrypoints.web.http.redirections.entrypoint.permanent=true'
-      - '--providers.docker=true'
-      - '--providers.docker.exposedbydefault=false'
-      - '--entrypoints.websecure.address=:443'
-      - '--entryPoints.websecure.forwardedHeaders.insecure=true'
-      - '--entryPoints.websecure.proxyProtocol.insecure=true'
-      - '--certificatesresolvers.myresolver.acme.tlschallenge=true'
-      - '--certificatesresolvers.myresolver.acme.email=info@elmis-dev.org'
-      - '--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json'
-    ports:
-      - '80:80'
-      - '443:443'
-    networks:
-      - 'default'
-    volumes:
-      - '/var/lib/docker/volumes/letsencrypt:/letsencrypt'
-      - '/var/run/docker.sock:/var/run/docker.sock:ro'
-
   config-container:
     command: /init.sh
     env_file: settings.env
     build:
-      context: config
+      context: ./config
     volumes:
       - config-volume:/config
 
@@ -60,13 +33,13 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ log ]
+    depends_on: [log]
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
     ports:
-      - "9980:80"
-      - "9443:443"
+      - "${OL_HTTP_PORT:-80}:80"
+      - "${OL_HTTPS_PORT:-443}:443"
     env_file: settings.env
     environment:
       NGINX_LOG_DIR: '/var/log/nginx/log'
@@ -78,7 +51,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ consul, log, config-container ]
+    depends_on: [consul, log, config-container]
 
   nifi:
     image: apache/nifi:${OL_NIFI_VERSION}
@@ -90,18 +63,19 @@ services:
     entrypoint: >
       bash -c "/config/nifi/scripts/start.sh ${OL_NIFI_VERSION}"
     environment:
+      - JAVA_OPTS=-Xmx1024m
       - NIFI_JVM_HEAP_INIT=${NIFI_JVM_HEAP_INIT}
       - NIFI_JVM_HEAP_MAX=${NIFI_JVM_HEAP_MAX}
     logging:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ log, config-container, nginx ]
+    depends_on: [log,config-container,nginx]
     env_file: settings.env
 
   db-service-configuration:
     build:
-      context: db
+      context: ./db
     volumes:
       - db-config-volume:/docker-entrypoint-initdb.d
 
@@ -110,6 +84,7 @@ services:
     env_file: settings.env
     volumes:
       - db-config-volume:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
     ports:
       - "${REPORTING_POSTGRES_PORT:-5432}:5432"
     logging:
@@ -120,11 +95,11 @@ services:
       default:
         aliases:
           - reporting-db
-    depends_on: [ log, db-service-configuration ]
+    depends_on: [log,db-service-configuration]
 
   cron-config:
     build:
-      context: cron
+      context: ./cron
     volumes:
       - cron-periodic-volume:/cron/periodic
 
@@ -138,7 +113,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ log, cron-config ]
+    depends_on: [log,cron-config]
 
   zookeeper:
     image: confluentinc/cp-zookeeper:${OL_CONFLUENT_VERSION}
@@ -150,11 +125,12 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ log ]
+    depends_on: [log]
 
   kafka:
     image: confluentinc/cp-kafka:${OL_CONFLUENT_VERSION}
     environment:
+      - JAVA_OPTS=-Xmx1024m
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:32181
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092
       - KAFKA_BROKER_ID=2
@@ -167,13 +143,14 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ log, config-container, zookeeper ]
+    depends_on: [log,config-container,zookeeper]
 
   connect:
     image: openlmis/debezium-connect
     ports:
       - 8083:8083
     environment:
+      - JAVA_OPTS=-Xmx1024m
       - BOOTSTRAP_SERVERS=kafka:29092
       - GROUP_ID=1
       - CONFIG_STORAGE_TOPIC=my_connect_configs
@@ -183,7 +160,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ kafka ]
+    depends_on: [kafka]
 
   connect-reg:
     image: openlmis/toolbelt
@@ -196,7 +173,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ connect ]
+    depends_on: [connect]
 
   kafka-rest:
     image: confluentinc/cp-kafka-rest:${OL_CONFLUENT_VERSION}
@@ -212,7 +189,7 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ kafka ]
+    depends_on: [kafka]
 
   kafka-topics-ui:
     image: landoop/kafka-topics-ui
@@ -227,16 +204,18 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ kafka-rest ]
+    depends_on: [kafka-rest]
 
   superset:
     build:
-      context: superset
+      context: ./superset
       args:
         SUPERSET_VERSION: ${OL_SUPERSET_VERSION}
         SUPERSET_PATCHUP_VERSION: ${OL_SUPERSET_PATCHUP_VERSION}
     ports:
       - "8088:8088"
+    environment:
+      - JAVA_OPTS=-Xmx2048m
     volumes:
       - config-volume:/config
     command: >
@@ -246,13 +225,8 @@ services:
       driver: syslog
       options:
         syslog-address: "udp://127.0.0.1:${SYSLOG_UDP_PORT}"
-    depends_on: [ db, config-container, nginx ]
+    depends_on: [db, config-container, nginx]
     env_file: settings.env
-    labels:
-      - 'traefik.enable=true'
-      - 'traefik.http.routers.nginx.rule=Host(`elmis.report.apps.moh.gm`)'
-      - 'traefik.http.routers.nginx.entrypoints=websecure'
-      - 'traefik.http.routers.nginx.tls.certresolver=myresolver'
 
 volumes:
   syslog:
@@ -263,5 +237,5 @@ volumes:
     external: false
   cron-periodic-volume:
     external: false
-  pg-data:
+  pgdata:
     external: true

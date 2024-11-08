@@ -23,8 +23,9 @@ ENV GUNICORN_BIND=0.0.0.0:8088 \
     SUPERSET_PATCHUP_VERSION=${SUPERSET_PATCHUP_VERSION} \
     SUPERSET_PATCHUP_REPO=https://github.com/OpenLMIS/superset-patchup.git@${SUPERSET_PATCHUP_VERSION} \
     SUPERSET_HOME=/var/lib/superset \
-    APP_DIR=${APP_DIR}
-ENV GUNICORN_CMD_ARGS="--workers ${GUNICORN_WORKERS} --timeout ${GUNICORN_TIMEOUT} --bind ${GUNICORN_BIND} --limit-request-line ${GUNICORN_LIMIT_REQUEST_LINE} --limit-request-field_size ${GUNICORN_LIMIT_REQUEST_FIELD_SIZE}"
+    APP_DIR=${APP_DIR} \
+    WORKER_CLASS=gevent
+ENV GUNICORN_CMD_ARGS="--workers ${GUNICORN_WORKERS} -k ${WORKER_CLASS} --timeout ${GUNICORN_TIMEOUT} --bind ${GUNICORN_BIND} --limit-request-line ${GUNICORN_LIMIT_REQUEST_LINE} --limit-request-field_size ${GUNICORN_LIMIT_REQUEST_FIELD_SIZE}"
 
 COPY requirements.txt requirements.txt
 
@@ -43,36 +44,32 @@ RUN useradd -U -m superset && \
         freetds-bin \
         freetds-dev \
         postgresql-client \
+        libssl-dev \
         libffi-dev \
-        libldap2-dev \
-        libpq-dev \
+        python-dev \
         libsasl2-dev \
-        libssl1.0 && \
+        libldap2-dev \
+        libecpg-dev && \
     apt-get clean && \
     rm -r /var/lib/apt/lists/* && \
-    pip install -I --no-cache-dir -r requirements.txt && \
-    rm requirements.txt && \
+    pip install --upgrade setuptools "pip<24.1" && \
     pip install --no-cache-dir \
-        setuptools==65.6.3 \
-        flask-mail==0.9.1 \
-        flask-oauth==0.12 \
-        flask_oauthlib==0.9.5 \
-        requests-oauthlib==1.1.0 \
-        gevent==1.5.0 \
-        impyla==0.15.0 \
-        infi.clickhouse-orm==1.0.2 \
-        pyathena==1.2.5 \
-        pyldap==2.4.28 \
-        sqlalchemy_trino==0.5.0 \
-        pydruid[sqlalchemy]==0.6.2 \
-        sqlalchemy-bigquery==1.4.4 \
-        clickhouse-sqlalchemy==0.1.10 \
-        sqlalchemy-redshift==0.8.11 \
+        gunicorn==20.1.0 \
+        gevent==22.10.2 \
         git+${SUPERSET_PATCHUP_REPO} \
         apache-superset==${SUPERSET_VERSION} \
-        apache-superset[cors]==${SUPERSET_VERSION} && \
+        apache-superset[cors]==${SUPERSET_VERSION} \
+        flask-mail==0.9.1 \
+        flask-oauth==0.12 \
+        flask_oauthlib==0.9.5 && \
     # MarkupSafe, fix missing 'soft_unicode' from 'markupsafe'
-    pip install -I --no-cache-dir MarkupSafe==2.0.1
+    # fix cryptography, flask, werkzeug to last known working versions
+    pip install -I --no-cache-dir \
+        MarkupSafe==2.0.1 \
+        cryptography==38.0.2 \
+        flask==1.1.4 \
+        werkzeug==1.0.1 \
+        psycopg2-binary==2.9.1
 
 # Configure Filesystem
 RUN find ${APP_DIR} \! -type l -print0 | xargs -0 chown superset:superset
@@ -97,6 +94,9 @@ ENV PATH=$NVM_DIR/versions/node/$NODE_VERSION/bin:$PATH
 RUN node -v
 RUN npm -v
 
+# Copy OpenLMIS Customization
+COPY app-customizations/$SUPERSET_VERSION $APP_DIR
+
 # Installing dependecies via npm
 RUN npm install -g po2json
 
@@ -110,7 +110,7 @@ RUN wget -P /tmp https://github.com/apache/superset/archive/${SUPERSET_VERSION}.
     && rm -r /tmp/${SUPERSET_VERSION}.zip
 
 USER superset:superset
-RUN cd $APP_DIR/superset-frontend && npm ci
+RUN cd $APP_DIR/superset-frontend && npm ci && npm run build && cp -r ../superset/static/assets ../static
 
 # Deploy application
 EXPOSE 8088
