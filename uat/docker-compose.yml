@@ -1,14 +1,6 @@
 version: '3.3'
 
-x-logging:
-  &default-logging
-  driver: json-file
-  options:
-    max-size: "50m"
-    max-file: "7"
-
 services:
-
   consul:
     command: -server -bootstrap
     image: gliderlabs/consul-server
@@ -17,7 +9,6 @@ services:
       - "8400"
       - "8500:8500"
       - "53"
-    logging: *default-logging
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
@@ -32,14 +23,17 @@ services:
       - 'default'
     ports:
       - '80:80'
-    logging: *default-logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "7"
 
   reference-ui:
     restart: always
     image: openlmisgambia/ui:${GAMBIA_UI_VERSION}
     env_file: settings.env
     depends_on: [consul]
-    logging: *default-logging
 
   requisition:
     restart: always
@@ -53,7 +47,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   referencedata:
     restart: always
@@ -67,7 +60,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   auth:
     restart: always
@@ -82,7 +74,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   notification:
     restart: always
@@ -96,7 +87,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   fulfillment:
     restart: always
@@ -110,7 +100,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   cce:
     restart: always
@@ -124,7 +113,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   stockmanagement:
     restart: always
@@ -138,7 +126,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   report:
     restart: always
@@ -152,7 +139,6 @@ services:
       - 'syslog:/var/log'
     depends_on: [log]
     command: ["/wait-for-postgres.sh", "/run.sh"]
-    logging: *default-logging
 
   buq:
     restart: always
@@ -165,7 +151,6 @@ services:
       - 'service-config:/config'
       - 'syslog:/var/log'
     depends_on: [log]
-    logging: *default-logging
 
   diagnostics:
     restart: always
@@ -178,7 +163,6 @@ services:
       - 'service-config:/config'
       - 'syslog:/var/log'
     depends_on: [log]
-    logging: *default-logging
 
   log:
     restart: always
@@ -188,14 +172,12 @@ services:
     depends_on:
       - service-configuration
       - consul
-    logging: *default-logging
 
   service-configuration:
     build:
       context: config
     volumes:
       - service-config:/config
-    logging: *default-logging
 
   ftp:
     image: hauptmedia/proftpd
