@@ -1957,7 +1957,7 @@ ALTER TABLE reporting_dates OWNER TO postgres;
 
 -- Insert default values for reporting dates --
 INSERT INTO reporting_dates(due_days, late_days, country) 
-    VALUES(14, 7, 'Malawi'), (14, 7, 'Mozambique');
+    VALUES(5, 5, 'Gambia');
 
 
 CREATE MATERIALIZED VIEW view_facility_access AS
