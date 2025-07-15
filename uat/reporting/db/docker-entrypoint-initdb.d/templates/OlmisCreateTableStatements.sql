@@ -2105,7 +2105,7 @@ ALTER MATERIALIZED VIEW view_facility_access OWNER TO postgres;
 ---
 
 CREATE MATERIALIZED VIEW reporting_rate_and_timeliness AS
-SELECT f.name
+SELECT f.name AS facility_name
   , dgz.name AS district
   , rgz.name AS region
   , cgz.name AS country
