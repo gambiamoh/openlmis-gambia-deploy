@@ -1,0 +1,19 @@
+services:
+  rds-restore:
+    image: openlmisgambia/rds-restore:1.0
+    env_file: .env-restore
+    volumes:
+      - restore-config:/external:ro
+    depends_on:
+      restore-config:
+        condition: service_completed_successfully
+
+  restore-config:
+    build:
+      context: ./
+    volumes:
+      - restore-config:/restore
+
+volumes:
+  restore-config:
+    name: uat_restore_config_data

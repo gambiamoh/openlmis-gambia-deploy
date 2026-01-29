@@ -1,14 +1,9 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
 export DOCKER_TLS_VERIFY="1"
-export DOCKER_HOST="uat.elmis.apps.moh.gm:2376"
-export DOCKER_CERT_PATH="${PWD}/credentials"
-export KEEP_OR_WIPE="keep"
+export DOCKER_HOST="tcp://uat.elmis.apps.moh.gm:2376"
+export DOCKER_CERT_PATH="${SCRIPT_DIR}/credentials"
 
-#../shared/init_env_gh.sh
-
- export spring_profiles_active="production"
-
-../shared/pull_images.sh $1
-
-../shared/restart.sh $1
+$SCRIPT_DIR/../shared/restart_or_restore.sh "uat"

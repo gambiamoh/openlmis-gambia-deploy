@@ -1,6 +1,5 @@
-version: '3.3'
-
 services:
+
   consul:
     command: -server -bootstrap
     image: gliderlabs/consul-server
@@ -9,31 +8,34 @@ services:
       - "8400"
       - "8500:8500"
       - "53"
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-s", "http://127.0.0.1:8500/v1/status/leader" ]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 40s
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
+    ports:
+      - '80:80'
     env_file: settings.env
     environment:
       NGINX_LOG_DIR: '/var/log/nginx/log'
     volumes:
       - 'nginx-log:/var/log/nginx/log'
       - 'consul-template-log:/var/log/consul-template'
-    depends_on: [consul]
-    networks:
-      - 'default'
-    ports:
-      - '80:80'
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "7"
+    depends_on:
+      consul:
+        condition: service_healthy
 
   reference-ui:
     restart: always
     image: openlmisgambia/ui:${GAMBIA_UI_VERSION}
     env_file: settings.env
-    depends_on: [consul]
+    depends_on:
+      consul:
+        condition: service_healthy
 
   requisition:
     restart: always
@@ -41,12 +43,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   referencedata:
     restart: always
@@ -54,12 +58,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   auth:
     restart: always
@@ -67,13 +73,15 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'auth-tomcat-log:/var/log/auth-tomcat'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   notification:
     restart: always
@@ -81,12 +89,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   fulfillment:
     restart: always
@@ -94,12 +104,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   cce:
     restart: always
@@ -107,12 +119,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   stockmanagement:
     restart: always
@@ -120,12 +134,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   report:
     restart: always
@@ -133,12 +149,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx2560m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
-    command: ["/wait-for-postgres.sh", "/run.sh"]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   buq:
     restart: always
@@ -146,11 +164,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   diagnostics:
     restart: always
@@ -158,11 +179,14 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml'
-      spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
+    depends_on:
+      log:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   log:
     restart: always
@@ -170,8 +194,10 @@ services:
     volumes:
       - 'syslog:/var/log'
     depends_on:
-      - service-configuration
-      - consul
+      service-configuration:
+        condition: service_started
+      consul:
+        condition: service_healthy
 
   service-configuration:
     build:
@@ -185,24 +211,19 @@ services:
       - "${OL_FTP_PORT_21:-21}:21"
       - "${OL_FTP_PORT_20:-20}:20"
     env_file: settings.env
-    depends_on: [consul]
+    depends_on:
+      consul:
+        condition: service_healthy
 
   redis:
     image: redis:3.2.12
-    depends_on: [consul]
+    depends_on:
+      consul:
+        condition: service_healthy
 
 volumes:
   syslog:
-    external: false
   nginx-log:
-    external: false
   auth-tomcat-log:
-    external: false
   consul-template-log:
-    external: false
   service-config:
-    external: false
-
-networks:
-  default:
-    external: false
