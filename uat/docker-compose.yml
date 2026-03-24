@@ -130,7 +130,7 @@ services:
 
   stockmanagement:
     restart: always
-    image: openlmis/stockmanagement:${OL_STOCKMANAGEMENT_VERSION}
+    image: openlmisgambia/temp-stockmanagement:0.0.1
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
