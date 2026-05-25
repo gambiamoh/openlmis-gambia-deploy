@@ -83,20 +83,40 @@ services:
       consul:
         condition: service_healthy
 
+  notification-truststore:
+    image: eclipse-temurin:8-jre
+    volumes:
+      - 'notification-truststore:/truststore'
+      - './config/notification/mail-gov-gm.pem:/tmp/mail-gov-gm.pem:ro'
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        SRC=$$(find "$$JAVA_HOME" -name cacerts | head -n1)
+        cp "$$SRC" /truststore/cacerts
+        chmod u+w /truststore/cacerts
+        keytool -importcert -noprompt -alias mail-gov-gm -file /tmp/mail-gov-gm.pem \
+          -keystore /truststore/cacerts -storepass changeit
+
   notification:
     restart: always
     image: openlmis/notification:${OL_NOTIFICATION_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration
+        -Djavax.net.ssl.trustStore=/truststore/cacerts -Djavax.net.ssl.trustStorePassword=changeit'
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
+      - 'notification-truststore:/truststore:ro'
     depends_on:
       log:
         condition: service_started
       consul:
         condition: service_healthy
+      notification-truststore:
+        condition: service_completed_successfully
 
   fulfillment:
     restart: always
@@ -227,3 +247,4 @@ volumes:
   auth-tomcat-log:
   consul-template-log:
   service-config:
+  notification-truststore:
