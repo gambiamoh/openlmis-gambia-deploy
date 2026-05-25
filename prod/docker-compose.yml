@@ -84,17 +84,40 @@ services:
     command: ["/wait-for-postgres.sh", "/run.sh"]
     logging: *default-logging
 
+  notification-truststore:
+    build:
+      context: config/notification
+    volumes:
+      - 'notification-truststore:/truststore'
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        SRC=$$(find "$$JAVA_HOME" -name cacerts | head -n1)
+        cp "$$SRC" /truststore/cacerts
+        chmod u+w /truststore/cacerts
+        keytool -importcert -noprompt -alias mail-gov-gm -file /tmp/mail-gov-gm.pem \
+          -keystore /truststore/cacerts -storepass changeit
+    logging: *default-logging
+
   notification:
     restart: always
     image: openlmis/notification:${OL_NOTIFICATION_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration
+        -Djavax.net.ssl.trustStore=/truststore/cacerts -Djavax.net.ssl.trustStorePassword=changeit'
       spring_profiles_active: ${spring_profiles_active}
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
-    depends_on: [log]
+      - 'notification-truststore:/truststore:ro'
+    depends_on:
+      log:
+        condition: service_started
+      notification-truststore:
+        condition: service_completed_successfully
     command: ["/wait-for-postgres.sh", "/run.sh"]
     logging: *default-logging
 
@@ -219,6 +242,8 @@ volumes:
   consul-template-log:
     external: false
   service-config:
+    external: false
+  notification-truststore:
     external: false
 
 networks:
