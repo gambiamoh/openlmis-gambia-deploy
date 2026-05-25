@@ -84,10 +84,10 @@ services:
         condition: service_healthy
 
   notification-truststore:
-    image: eclipse-temurin:8-jre
+    build:
+      context: config/notification
     volumes:
       - 'notification-truststore:/truststore'
-      - './config/notification/mail-gov-gm.pem:/tmp/mail-gov-gm.pem:ro'
     entrypoint:
       - sh
       - -c
