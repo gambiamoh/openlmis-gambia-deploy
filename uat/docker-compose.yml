@@ -105,7 +105,7 @@ services:
     env_file: settings.env
     environment:
       JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration
-        -Djavax.net.ssl.trustStore=/truststore/cacerts -Djavax.net.ssl.trustStorePassword=changeit'
+        -Djavax.net.ssl.trustStore=/truststore/cacerts'
     volumes:
       - 'service-config:/config'
       - 'syslog:/var/log'
