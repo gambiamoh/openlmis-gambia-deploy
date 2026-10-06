@@ -22,10 +22,9 @@ the package CHANGELOG, commit, deploy.
 
 ## Deploy
 
-Manual Jenkins job per environment: `shared/init_env_gh.sh` in `<env>/` (certs
-into `<env>/credentials`), then
-`ALLOY_ENV_FILE=$alloy_env monitoring/alloy/deploy_alloy.sh <env>` from the
-repo root.
+Manual Jenkins job `OpenLMIS-Gambia-monitoring-alloy-deploy-to-<env>`. It checks
+out this repo and `openlmis-gambia-config` (into `deployment-config/`) and runs
+`monitoring/alloy/deploy_alloy.sh <env>` from the workspace root.
 
 ## Scraping apps
 
