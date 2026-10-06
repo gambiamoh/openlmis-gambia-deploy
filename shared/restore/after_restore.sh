@@ -33,3 +33,17 @@ PGPASSWORD="${POSTGRES_PASSWORD}" psql \
     -c "$sql"
 
 echo "Success: Sensitive data cleared."
+
+# The snapshot comes from prod, which has no monitoring role; re-create the
+# read-only role postgres_exporter logs in as (monitoring/alloy/README.md).
+if [ -n "${MONITORING_DB_PASSWORD:-}" ]; then
+  PGPASSWORD="${POSTGRES_PASSWORD}" psql -v ON_ERROR_STOP=1 \
+      -h "${DB_HOST}" -p "${DB_PORT}" -d "${DB_NAME}" -U "${POSTGRES_USER}" \
+      -v pw="${MONITORING_DB_PASSWORD}" <<'SQL'
+SELECT format('CREATE ROLE olmis_monitoring LOGIN PASSWORD %L', :'pw')
+  WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'olmis_monitoring') \gexec
+SELECT format('ALTER ROLE olmis_monitoring PASSWORD %L', :'pw') \gexec
+GRANT pg_monitor TO olmis_monitoring;
+SQL
+  echo "Success: Monitoring role ready."
+fi
