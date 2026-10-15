@@ -1,37 +1,88 @@
 services:
 
-  consul:
-    command: -server -bootstrap
-    image: gliderlabs/consul-server
-    ports:
-      - "8300"
-      - "8400"
-      - "8500:8500"
-      - "53"
-    healthcheck:
-      test: [ "CMD", "wget", "-q", "-s", "http://127.0.0.1:8500/v1/status/leader" ]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 40s
-
-  nginx:
-    image: openlmis/nginx:${OL_NGINX_VERSION}
-    ports:
-      - '80:80'
-    env_file: settings.env
-    environment:
-      NGINX_LOG_DIR: '/var/log/nginx/log'
+  service-configuration:
+    build:
+      context: ./config
     volumes:
-      - 'nginx-log:/var/log/nginx/log'
-      - 'consul-template-log:/var/log/consul-template'
+      - service-config:/config
+
+  consul:
+    image: hashicorp/consul:${OL_CONSUL_VERSION}
+    command: agent -server -bootstrap-expect=1 -ui -client=0.0.0.0
+    environment:
+      CONSUL_BIND_INTERFACE: eth0
+    ports:
+      - "8300:8300"
+      - "8500:8500"
+      - "8600:8600/tcp"
+      - "8600:8600/udp"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8500/v1/status/leader"]
+      interval: 30s
+      timeout: 5s
+      retries: 20
+
+  log:
+    restart: always
+    image: openlmis/rsyslog:${OL_RSYSLOG_VERSION}
+    volumes:
+      - syslog:/var/log
+    depends_on:
+      service-configuration:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+
+  redis:
+    image: redis:3.2.12
     depends_on:
       consul:
         condition: service_healthy
 
+  nginx:
+    image: openlmis/nginx:${OL_NGINX_VERSION}
+    ports:
+      - "80:80"
+    env_file: settings.env
+    environment:
+      NGINX_LOG_DIR: '/var/log/nginx/log'
+    volumes:
+      - nginx-log:/var/log/nginx/log
+      - consul-template-log:/var/log/consul-template
+    depends_on:
+      consul:
+        condition: service_healthy
+    ulimits:
+      nofile:
+        soft: 20000
+        hard: 40000
+
   reference-ui:
     restart: always
     image: openlmisgambia/ui:${GAMBIA_UI_VERSION}
+    env_file: settings.env
+    depends_on:
+      consul:
+        condition: service_healthy
+      # Services from which data is being taken during logging in
+      referencedata:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      notification:
+        condition: service_healthy
+      report:
+        condition: service_healthy
+      fulfillment:
+        condition: service_healthy
+      stockmanagement:
+        condition: service_healthy
+
+  ftp:
+    image: driesva/proftpd
+    ports:
+      - "${OL_FTP_PORT_21:-21}:21"
+      - "${OL_FTP_PORT_20:-20}:20"
     env_file: settings.env
     depends_on:
       consul:
@@ -47,15 +98,28 @@ services:
       monitoring.service: "requisition"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      # Overrides what is in settings.env, needed because of restart_or_restore.sh
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms1280m
+        -Xmx1280m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
+      log:
+        condition: service_started
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
 
   referencedata:
     restart: always
@@ -67,15 +131,27 @@ services:
       monitoring.service: "referencedata"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms1280m
+        -Xmx1280m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
+      log:
+        condition: service_started
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 240s
+      retries: 5
 
   auth:
     restart: always
@@ -87,22 +163,34 @@ services:
       monitoring.service: "auth"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms386m
+        -Xmx386m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'auth-tomcat-log:/var/log/auth-tomcat'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
+      - auth-tomcat-log:/var/log/auth-tomcat
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
+      log:
+        condition: service_started
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
 
   notification-truststore:
     build:
       context: config/notification
     volumes:
-      - 'notification-truststore:/truststore'
+      - notification-truststore:/truststore
     entrypoint:
       - sh
       - -c
@@ -124,19 +212,31 @@ services:
       monitoring.service: "notification"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration
-        -Djavax.net.ssl.trustStore=/truststore/cacerts'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms512m
+        -Xmx512m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
+        -Djavax.net.ssl.trustStore=/truststore/cacerts
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
-      - 'notification-truststore:/truststore:ro'
+      - service-config:/config:ro
+      - notification-truststore:/truststore:ro
     depends_on:
-      log:
-        condition: service_started
-      consul:
-        condition: service_healthy
+      service-configuration:
+        condition: service_completed_successfully
       notification-truststore:
         condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+      log:
+        condition: service_started
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
 
   fulfillment:
     restart: always
@@ -148,35 +248,27 @@ services:
       monitoring.service: "fulfillment"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms512m
+        -Xmx512m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
-
-  cce:
-    restart: always
-    image: openlmis/cce:${OL_CCE_VERSION}
-    labels:
-      monitoring.scrape: "true"
-      monitoring.port: "8080"
-      monitoring.path: "/actuator/prometheus"
-      monitoring.service: "cce"
-    env_file: settings.env
-    environment:
-      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
-    volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
-    depends_on:
       log:
         condition: service_started
-      consul:
-        condition: service_healthy
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
 
   stockmanagement:
     restart: always
@@ -188,30 +280,80 @@ services:
       monitoring.service: "stockmanagement"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2048m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms1024m
+        -Xmx1024m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
+      log:
+        condition: service_started
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
 
   report:
     restart: always
     image: openlmisgambia/reports:${GAMBIA_REPORTS_VERSION}
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx2560m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms768m
+        -Xmx768m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
+      log:
+        condition: service_started
+    healthcheck:
+      test: "wget --spider http://localhost:8080/actuator/health || exit 1"
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 5
+
+  cce:
+    restart: always
+    image: openlmis/cce:${OL_CCE_VERSION}
+    labels:
+      monitoring.scrape: "true"
+      monitoring.port: "8080"
+      monitoring.path: "/actuator/prometheus"
+      monitoring.service: "cce"
+    env_file: settings.env
+    environment:
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms386m
+        -Xmx386m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
+    volumes:
+      - service-config:/config:ro
+    depends_on:
+      service-configuration:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+      log:
+        condition: service_started
 
   buq:
     restart: always
@@ -223,15 +365,21 @@ services:
       monitoring.service: "buq"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx1024m -Dlogging.config=/config/log/logback.xml -Dflyway.locations=classpath:db/migration'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms386m
+        -Xmx386m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
-      log:
-        condition: service_started
+      service-configuration:
+        condition: service_completed_successfully
       consul:
         condition: service_healthy
+      log:
+        condition: service_started
 
   diagnostics:
     restart: always
@@ -243,53 +391,26 @@ services:
       monitoring.service: "diagnostics"
     env_file: settings.env
     environment:
-      JAVA_OPTS: '-server -Xmx512m -Dlogging.config=/config/log/logback.xml'
+      spring_profiles_active: ${spring_profiles_active}
+      JAVA_OPTS: >-
+        -Xms386m
+        -Xmx386m
+        -Djava.security.egd=file:/dev/./urandom
+        -Dlogging.config=/config/log/logback.xml
     volumes:
-      - 'service-config:/config'
-      - 'syslog:/var/log'
-    depends_on:
-      log:
-        condition: service_started
-      consul:
-        condition: service_healthy
-
-  log:
-    restart: always
-    image: openlmis/rsyslog:${OL_RSYSLOG_VERSION}
-    volumes:
-      - 'syslog:/var/log'
+      - service-config:/config:ro
     depends_on:
       service-configuration:
+        condition: service_completed_successfully
+      consul:
+        condition: service_healthy
+      log:
         condition: service_started
-      consul:
-        condition: service_healthy
-
-  service-configuration:
-    build:
-      context: config
-    volumes:
-      - service-config:/config
-
-  ftp:
-    image: driesva/proftpd
-    ports:
-      - "${OL_FTP_PORT_21:-21}:21"
-      - "${OL_FTP_PORT_20:-20}:20"
-    env_file: settings.env
-    depends_on:
-      consul:
-        condition: service_healthy
-
-  redis:
-    image: redis:3.2.12
-    depends_on:
-      consul:
-        condition: service_healthy
 
 volumes:
+  service-config:
   syslog:
   nginx-log:
   auth-tomcat-log:
   consul-template-log:
-  service-config:
   notification-truststore:
