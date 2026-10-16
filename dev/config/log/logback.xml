@@ -1,7 +1,8 @@
 <configuration>
-    <include resource="org/springframework/boot/logging/logback/base.xml" />
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
 
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <appender name="LOGFILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <!-- Support multiple-JVM writing to the same log file -->
         <prudent>true</prudent>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
@@ -15,6 +16,7 @@
 
     <!-- Define the root logger log level -->
     <root level="WARN">
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOGFILE"/>
     </root>
 </configuration>
