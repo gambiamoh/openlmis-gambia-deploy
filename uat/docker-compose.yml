@@ -78,6 +78,16 @@ services:
       stockmanagement:
         condition: service_healthy
 
+  openlmis-ui:
+    restart: always
+    image: openlmis/openlmis-ui:${OL_UI_VERSION}
+    env_file: settings.env
+    environment:
+      BASE_PATH: /v2
+    depends_on:
+      consul:
+        condition: service_healthy
+
   ftp:
     image: driesva/proftpd
     ports:
