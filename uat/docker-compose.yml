@@ -320,6 +320,11 @@ services:
   report:
     restart: always
     image: openlmisgambia/reports:${GAMBIA_REPORTS_VERSION}
+    labels:
+      monitoring.scrape: "true"
+      monitoring.port: "8080"
+      monitoring.path: "/actuator/prometheus"
+      monitoring.service: "report"
     env_file: settings.env
     environment:
       spring_profiles_active: ${spring_profiles_active}
