@@ -1,3 +1,9 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "7"
+
 services:
 
   service-configuration:
@@ -5,6 +11,7 @@ services:
       context: ./config
     volumes:
       - service-config:/config
+    logging: *logging
 
   consul:
     image: hashicorp/consul:${OL_CONSUL_VERSION}
@@ -21,23 +28,14 @@ services:
       interval: 30s
       timeout: 5s
       retries: 20
-
-  log:
-    restart: always
-    image: openlmis/rsyslog:${OL_RSYSLOG_VERSION}
-    volumes:
-      - syslog:/var/log
-    depends_on:
-      service-configuration:
-        condition: service_completed_successfully
-      consul:
-        condition: service_healthy
+    logging: *logging
 
   redis:
     image: redis:3.2.12
     depends_on:
       consul:
         condition: service_healthy
+    logging: *logging
 
   nginx:
     image: openlmis/nginx:${OL_NGINX_VERSION}
@@ -56,6 +54,7 @@ services:
       nofile:
         soft: 20000
         hard: 40000
+    logging: *logging
 
   reference-ui:
     restart: always
@@ -77,6 +76,7 @@ services:
         condition: service_healthy
       stockmanagement:
         condition: service_healthy
+    logging: *logging
 
   openlmis-ui:
     restart: always
@@ -87,6 +87,7 @@ services:
     depends_on:
       consul:
         condition: service_healthy
+    logging: *logging
 
   ftp:
     image: driesva/proftpd
@@ -97,6 +98,7 @@ services:
     depends_on:
       consul:
         condition: service_healthy
+    logging: *logging
 
   requisition:
     restart: always
@@ -110,10 +112,13 @@ services:
     environment:
       # Overrides what is in settings.env, needed because of restart_or_restore.sh
       spring_profiles_active: ${spring_profiles_active}
+      # logback.configurationFile applies the config from JVM start; the jar's own
+      # logback.xml logs to syslog host "log", and its startup error makes Spring abort.
       JAVA_OPTS: >-
         -Xms1280m
         -Xmx1280m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -122,14 +127,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 180s
       retries: 5
+    logging: *logging
 
   referencedata:
     restart: always
@@ -146,6 +150,7 @@ services:
         -Xms1280m
         -Xmx1280m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -154,14 +159,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 240s
       retries: 5
+    logging: *logging
 
   auth:
     restart: always
@@ -178,6 +182,7 @@ services:
         -Xms386m
         -Xmx386m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -187,14 +192,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 180s
       retries: 5
+    logging: *logging
 
   notification-truststore:
     build:
@@ -211,6 +215,7 @@ services:
         chmod u+w /truststore/cacerts
         keytool -importcert -noprompt -alias mail-gov-gm -file /tmp/mail-gov-gm.pem \
           -keystore /truststore/cacerts -storepass changeit
+    logging: *logging
 
   notification:
     restart: always
@@ -227,6 +232,7 @@ services:
         -Xms512m
         -Xmx512m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
         -Djavax.net.ssl.trustStore=/truststore/cacerts
     volumes:
@@ -239,14 +245,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 180s
       retries: 5
+    logging: *logging
 
   fulfillment:
     restart: always
@@ -263,6 +268,7 @@ services:
         -Xms512m
         -Xmx512m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -271,14 +277,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 180s
       retries: 5
+    logging: *logging
 
   stockmanagement:
     restart: always
@@ -295,6 +300,7 @@ services:
         -Xms1024m
         -Xmx1024m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -303,14 +309,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 180s
       retries: 5
+    logging: *logging
 
   report:
     restart: always
@@ -322,6 +327,7 @@ services:
         -Xms768m
         -Xmx768m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -330,14 +336,13 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
     healthcheck:
       test: "wget --spider http://localhost:8080/actuator/health || exit 1"
       interval: 30s
       timeout: 5s
       start_period: 180s
       retries: 5
+    logging: *logging
 
   cce:
     restart: always
@@ -354,6 +359,7 @@ services:
         -Xms386m
         -Xmx386m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -362,8 +368,7 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
+    logging: *logging
 
   buq:
     restart: always
@@ -380,6 +385,7 @@ services:
         -Xms386m
         -Xmx386m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -388,8 +394,7 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
+    logging: *logging
 
   diagnostics:
     restart: always
@@ -406,6 +411,7 @@ services:
         -Xms386m
         -Xmx386m
         -Djava.security.egd=file:/dev/./urandom
+        -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
     volumes:
       - service-config:/config:ro
@@ -414,12 +420,10 @@ services:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
-      log:
-        condition: service_started
+    logging: *logging
 
 volumes:
   service-config:
-  syslog:
   nginx-log:
   auth-tomcat-log:
   consul-template-log:
