@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # API smoke test of an OpenLMIS Gambia environment. Run it before the database upgrade and
 # again after, then diff the two outputs:
-#   BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin ADMIN_PASS=... PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC15 SMOKE_WRITES=1 ./smoke-api.sh | tee smoke-pg14.txt
+#   read -rs ADMIN_PASS && export ADMIN_PASS; BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC15 SMOKE_WRITES=1 ./smoke-api.sh | tee smoke-pg14.txt
 # Needs curl + jq. Read-only unless SMOKE_WRITES=1, which adds a requisition up to submit at
 # REQ_FACILITY, two stock adjustments that cancel out, a physical inventory draft that is
 # deleted, a facility update that is reverted and (with a service token) a notification; the
-# submitted requisition stays behind, so on prod run read-only or against a test facility.
+# submitted requisition stays behind. UAT only: on prod run read-only (see README).
 # IDS_FILE=<path> records the ids the write flows touched. CHECK_LOGS=1 adds a SQL-error scan
 # of the compose containers (only on the host). PASS/FAIL lines carry no ids, so two runs diff cleanly.
 set -uo pipefail

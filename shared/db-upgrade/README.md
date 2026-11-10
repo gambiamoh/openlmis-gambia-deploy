@@ -27,7 +27,7 @@ slots, Flyway history per schema, large objects, planner stats, row count of eve
 content checksums of the business tables (`CHECKSUM_TABLES`).
 
 ```
-./baseline.sh pg14 /root/opsd-132          # before the upgrade, services still running is fine
+./baseline.sh pg14 /root/opsd-132          # before the upgrade, after the services are stopped
 ./baseline.sh pg17 /root/opsd-132          # after the upgrade, before the services start
 diff -r /root/opsd-132/baseline-pg14 /root/opsd-132/baseline-pg17
 ```
@@ -43,8 +43,9 @@ warms the volume after the upgrade.
 ### `smoke-api.sh` — API round trip through nginx
 
 Runs anywhere with `curl` and `jq`. Read-only by default; `SMOKE_WRITES=1` adds the write
-flows and leaves a submitted requisition behind, so on prod run read-only or point `REQ_FACILITY`
-at a test facility. Required: `BASE_URL`, `ADMIN_PASS`, `PROGRAM` (name), `FACILITY` (code).
+flows (UAT only). **On prod run it read-only:** only the requisition goes to `REQ_FACILITY`; the
+facility update, the ±1 adjustments, the physical inventory draft and the CCE update go to
+`FACILITY`, a real store, and the requisition can be converted into a real order. Required: `BASE_URL`, `ADMIN_PASS`, `PROGRAM` (name), `FACILITY` (code).
 Optional: `ADMIN_USER` (default `administrator`; on Gambia the admin is `admin`), `CLIENT_ID`/`CLIENT_SECRET`
 (UI OAuth client), `SERVICE_CLIENT_ID`/`SERVICE_CLIENT_SECRET` (adds the service-token checks),
 `REQ_FACILITY` (code of the facility that requisitions, default `FACILITY`), `SUPPLYING_DEPOT` (code), `TEST_USER`/`TEST_USER_PASS` (password reset round trip),
@@ -55,7 +56,8 @@ service containers, host only).
 
 ```
 set -o pipefail                           # keep the script's exit code through tee
-export BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin ADMIN_PASS=... PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC15 SMOKE_WRITES=1
+read -rs ADMIN_PASS && export ADMIN_PASS  # keeps the password out of the shell history
+export BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC15 SMOKE_WRITES=1
 ./smoke-api.sh | tee smoke-pg14.txt       # before the upgrade: proves the test itself passes
 ./smoke-api.sh | tee smoke-pg17.txt       # after
 diff smoke-pg14.txt smoke-pg17.txt
