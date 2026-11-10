@@ -174,7 +174,7 @@ ALLOWLIST=$(get_env SOURCE_PG_TABLE_ALLOWLIST)
 
 # No -i: it would drain the stdin that feeds this script (bash -s).
 psql_rds() {
-  docker run --rm -v "$REPORTING_REMOTE_PATH/.deploy:/sql:ro" -e PGPASSWORD="$SOURCE_PG_PASSWORD" postgres:14-alpine \
+  docker run --rm -v "$REPORTING_REMOTE_PATH/.deploy:/sql:ro" -e PGPASSWORD="$SOURCE_PG_PASSWORD" postgres:17-alpine \
     psql "host=$SOURCE_PG_HOST port=${SOURCE_PG_PORT:-5432} dbname=$SOURCE_PG_DB user=$SOURCE_PG_USER sslmode=${SOURCE_PG_SSLMODE:-require}" \
     -v ON_ERROR_STOP=1 "$@"
 }

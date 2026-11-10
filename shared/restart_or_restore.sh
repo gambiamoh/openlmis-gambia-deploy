@@ -16,6 +16,7 @@ if [ ! -d "$ENV_PATH" ]; then
 fi
 
 : "${KEEP_OR_RESTORE:?Need to set KEEP_OR_RESTORE environment variable (keep|restore)}"
+# restore rebuilds the environment from the latest PROD snapshot: while prod runs an older PostgreSQL major than this environment, use keep only (shared/db-upgrade/README.md)
 
 echo "========================================"
 echo "Deploying to: $TARGET_ENV"
