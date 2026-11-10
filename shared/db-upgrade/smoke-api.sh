@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# API smoke test of an OpenLMIS Gambia environment (OPSD-132). Run it before the database
-# upgrade and again after, then diff the two outputs:
-#   BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin ADMIN_PASS=... PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC4 ./smoke-api.sh | tee smoke-pg14.txt
-# Needs curl + jq. Writes to the environment (a requisition up to an order, two stock
-# adjustments that cancel out, a physical inventory draft, a facility update that is reverted,
-# a notification) unless SMOKE_WRITES=0. CHECK_LOGS=1 adds a SQL-error scan of the compose
-# containers (only on the host). PASS/FAIL lines carry no ids, so two runs diff cleanly.
+# API smoke test of an OpenLMIS Gambia environment. Run it before the database upgrade and
+# again after, then diff the two outputs:
+#   BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin ADMIN_PASS=... PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC15 SMOKE_WRITES=1 ./smoke-api.sh | tee smoke-pg14.txt
+# Needs curl + jq. Read-only unless SMOKE_WRITES=1, which adds a requisition up to submit at
+# REQ_FACILITY, two stock adjustments that cancel out, a physical inventory draft that is
+# deleted, a facility update that is reverted and (with a service token) a notification; the
+# submitted requisition stays behind, so on prod run read-only or against a test facility.
+# IDS_FILE=<path> records the ids the write flows touched. CHECK_LOGS=1 adds a SQL-error scan
+# of the compose containers (only on the host). PASS/FAIL lines carry no ids, so two runs diff cleanly.
 set -uo pipefail
 
 : "${BASE_URL:?e.g. https://uat.elmis.apps.moh.gm}"
@@ -23,7 +25,7 @@ TEST_USER=${TEST_USER:-}                          # password reset round-trip; s
 TEST_USER_PASS=${TEST_USER_PASS:-}
 REPORT_PARAMS=${REPORT_PARAMS:-}                  # query string for every Jasper PDF; default built below from PROGRAM/FACILITY
 LINE_ITEM_PATCH=${LINE_ITEM_PATCH:-'{beginningBalance: 0, totalReceivedQuantity: 0, totalConsumedQuantity: 0, totalLossesAndAdjustments: 0, totalStockoutDays: 0, stockOnHand: 0, requestedQuantity: null, requestedQuantityExplanation: null, skipped: false}'}  # Gambia template: all USER_INPUT columns, requestedQuantity hidden (calculated order quantity is used)
-SMOKE_WRITES=${SMOKE_WRITES:-1}
+SMOKE_WRITES=${SMOKE_WRITES:-0}
 CHECK_LOGS=${CHECK_LOGS:-0}
 LOG_SINCE=${LOG_SINCE:-30m}
 COMPOSE_PROJECT=${COMPOSE_PROJECT:-uat}
@@ -61,12 +63,12 @@ if [ -n "$SERVICE_CLIENT_ID" ]; then
   check auth.token.client_credentials 200 "$code"
 else skip auth.token.client_credentials "SERVICE_CLIENT_ID unset"; fi
 code=$(req GET "/api/users?username=$ADMIN_USER"); ADMIN_ID=$(jqb '.content[0].id // empty'); check auth.users.admin 200 "$code" "admin=$(found "$ADMIN_ID")"
-if [ -n "$TEST_USER" ] && writes; then
+if [ -n "$TEST_USER" ] && [ -n "$TEST_USER_PASS" ] && writes; then
   NEWPW="Pg17smoke$(date +%s)"
   code=$(req POST /api/users/auth/passwordReset "${JSON[@]}" -d "{\"username\":\"$TEST_USER\",\"newPassword\":\"$NEWPW\"}"); check auth.passwordReset 200 "$code"
   code=$(token "$CLIENT_ID" "$CLIENT_SECRET" -d grant_type=password --data-urlencode "username=$TEST_USER" --data-urlencode "password=$NEWPW"); check auth.login.newPassword 200 "$code"
   code=$(req POST /api/users/auth/passwordReset "${JSON[@]}" -d "{\"username\":\"$TEST_USER\",\"newPassword\":\"$TEST_USER_PASS\"}"); check auth.passwordReset.restore 200 "$code"
-else skip auth.passwordReset "TEST_USER unset or SMOKE_WRITES=0"; fi
+else skip auth.passwordReset "TEST_USER/TEST_USER_PASS unset or SMOKE_WRITES=0"; fi
 
 section "2 referencedata"
 code=$(req GET /api/programs); PROG_ID=$(jqb --arg n "$PROGRAM" '[.[] | select(.name == $n)][0].id // empty'); check ref.programs 200 "$code" "count=$(jqb length) program=$(found "$PROG_ID")"
@@ -83,6 +85,7 @@ if writes; then
   code=$(req PUT "/api/facilities/$FAC_ID" "${JSON[@]}" -d @"$TMP/facility-upd.json"); check ref.facility.put 200 "$code"
   code=$(req GET "/api/facilities/$FAC_ID"); check ref.facility.get 200 "$code" "description=$(jqb .description)"
   code=$(req PUT "/api/facilities/$FAC_ID" "${JSON[@]}" -d @"$TMP/facility.json"); check ref.facility.restore 200 "$code"
+  code=$(req GET "/api/facilities/$FAC_ID"); check ref.facility.roundtrip 200 "$code" "identical=$(cmp -s <(jq -S . "$TMP/facility.json") <(jq -S . "$TMP/body") && echo yes || echo no)"
 else skip ref.facility.put "SMOKE_WRITES=0"; fi
 
 section "3 requisition"
@@ -91,12 +94,11 @@ if writes; then
   code=$(req GET "/api/requisitions/periodsForInitiate?programId=$PROG_ID&facilityId=$REQ_FAC_ID&emergency=false"); PER=$(jqb '.[0].id // empty'); check req.periodsForInitiate 200 "$code" "periods=$(jqb "$CNT") reqFacility=$(found "$REQ_FAC_ID")"
   req GET "/api/requisitions/search?facility=$REQ_FAC_ID&program=$PROG_ID&requisitionStatus=INITIATED&emergency=false&size=1" >/dev/null; RID=$(jqb '.content[0].id // empty')
   if [ -n "$RID" ]; then
-    echo "reusing the INITIATED regular requisition"; code=$(req GET "/api/requisitions/$RID"); [ "$code" = 200 ] && code=201
+    code=$(req GET "/api/requisitions/$RID"); check req.reuse 200 "$code" "INITIATED regular requisition reused, lineItems=$(jqb '.requisitionLineItems | length')"
   else
     code=$(req POST "/api/requisitions/initiate?program=$PROG_ID&facility=$REQ_FAC_ID&suggestedPeriod=$PER&emergency=false"); RID=$(jqb '.id // empty')
-    [ -n "$RID" ] || { echo "regular initiate: $code $(err) -> trying emergency"; code=$(req POST "/api/requisitions/initiate?program=$PROG_ID&facility=$REQ_FAC_ID&suggestedPeriod=$PER&emergency=true"); RID=$(jqb '.id // empty'); }
+    check req.initiate 201 "$code" "lineItems=$(jqb '.requisitionLineItems | length')"
   fi
-  check req.initiate 201 "$code" "lineItems=$(jqb '.requisitionLineItems | length') emergency=$(jqb .emergency)"
   ids "requisition=$RID"
 fi
 if [ -n "$RID" ]; then

@@ -1,7 +1,7 @@
 # Database major upgrade (RDS PostgreSQL)
 
 Tooling and the short procedure used for OPSD-132 (UAT 14 → 17). The long form, prechecks and
-the reporting-stack detach/re-attach steps are in the OpenLMIS PostgreSQL upgrade manual
+the reporting-stack detach/re-attach steps are in the [OpenLMIS PostgreSQL upgrade manual](https://openlmis.atlassian.net/wiki/spaces/OP/pages/2179923985)
 (Confluence) and in `soldevelo-reporting-stack/docs/runbook-source-upgrade.md`.
 
 ## Rule while prod and UAT run different majors
@@ -34,35 +34,45 @@ diff -r /root/opsd-132/baseline-pg14 /root/opsd-132/baseline-pg17
 
 Expected differences: `version.txt`, `server_version` in `settings.txt`, the PostGIS line in
 `extensions.txt` after `ALTER EXTENSION postgis UPDATE`, `datcollversion` in `collation.txt`
-(null on 14), `slots.txt` while the Debezium slot is dropped/re-created, `size.txt` (slightly).
-Everything else must be identical. The row count pass reads the whole database, which also
+(null on 14), `slots.txt` while the Debezium slot is dropped/re-created, `size.txt` (slightly),
+`stats.txt` (pg_upgrade drops planner statistics; `tables_never_analyzed` is back to 0 after
+`vacuumdb --analyze-in-stages`) and the `public` function count in `schema_objects.txt` after a
+PostGIS major update. Everything else must be identical. The row count pass reads the whole database, which also
 warms the volume after the upgrade.
 
 ### `smoke-api.sh` — API round trip through nginx
 
-Runs anywhere with `curl` and `jq`. Required: `BASE_URL`, `ADMIN_PASS`, `PROGRAM` (name),
-`FACILITY` (code). Optional: `ADMIN_USER` (default `administrator`), `CLIENT_ID`/`CLIENT_SECRET`
+Runs anywhere with `curl` and `jq`. Read-only by default; `SMOKE_WRITES=1` adds the write
+flows and leaves a submitted requisition behind, so on prod run read-only or point `REQ_FACILITY`
+at a test facility. Required: `BASE_URL`, `ADMIN_PASS`, `PROGRAM` (name), `FACILITY` (code).
+Optional: `ADMIN_USER` (default `administrator`; on Gambia the admin is `admin`), `CLIENT_ID`/`CLIENT_SECRET`
 (UI OAuth client), `SERVICE_CLIENT_ID`/`SERVICE_CLIENT_SECRET` (adds the service-token checks),
 `REQ_FACILITY` (code of the facility that requisitions, default `FACILITY`), `SUPPLYING_DEPOT` (code), `TEST_USER`/`TEST_USER_PASS` (password reset round trip),
 `REPORT_PARAMS` (query string for the Jasper PDFs), `LINE_ITEM_PATCH` (jq object merged into
-every requisition line item before submit), `SMOKE_WRITES=0` (read-only run), `CHECK_LOGS=1`
-with `LOG_SINCE`/`COMPOSE_PROJECT` (SQL-error scan of the service containers, host only).
+every requisition line item before submit), `IDS_FILE` (file that records the ids the write
+flows touched), `CHECK_LOGS=1` with `LOG_SINCE`/`COMPOSE_PROJECT` (SQL-error scan of the
+service containers, host only).
 
 ```
-export BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_PASS=... PROGRAM='...' FACILITY=...
+set -o pipefail                           # keep the script's exit code through tee
+export BASE_URL=https://uat.elmis.apps.moh.gm ADMIN_USER=admin ADMIN_PASS=... PROGRAM='Essential Medicines' FACILITY=GCMS REQ_FACILITY=WHR1HCC15 SMOKE_WRITES=1
 ./smoke-api.sh | tee smoke-pg14.txt       # before the upgrade: proves the test itself passes
 ./smoke-api.sh | tee smoke-pg17.txt       # after
 diff smoke-pg14.txt smoke-pg17.txt
 ```
 
 What it exercises, in order: OAuth tokens, user lookup, optional password reset; referencedata
-reads and a facility update that is reverted; a requisition initiated → updated → submitted →
-authorized → approved → printed → converted to an order; the order's print, PODs and
+reads and a facility update that is reverted (and checked for a byte-identical round trip); a
+requisition initiated (or an INITIATED one reused) → updated → submitted → authorized → approved
+→ printed → converted to an order (the last three need the matching rights, otherwise they are
+recorded as FAIL on both sides of the diff); the order's print, PODs and
 shipments; stock card summaries, a +1/−1 adjustment pair, a physical inventory draft that is
 deleted, valid sources/destinations, range summaries; a notification; every common Jasper
 template as PDF (5xx fails, 4xx is recorded for the diff) and the dashboard reports; CCE
 inventory and catalog; BUQ lists; diagnostics version; both UIs. Exit code is non-zero when any
-check fails. The test requisition and order stay in the environment on purpose.
+check fails. The test requisition (and the order, when the rights allow it) stays in the
+environment on purpose; `REQ_FACILITY` must have no open regular requisition, otherwise
+`initiate` is refused and the run records that as FAIL.
 
 Not covered here, done by hand after the upgrade: proof-of-delivery confirmation and the
 reporting-stack checks (`make verify-cdc`, `make reconcile`), plus one `keep` deploy from

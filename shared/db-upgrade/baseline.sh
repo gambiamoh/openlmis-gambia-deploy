@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Database baseline for a before/after major-upgrade comparison (OPSD-132):
+# Database baseline for a before/after major-upgrade comparison:
 #   baseline.sh pg14 /root/opsd-132; <upgrade>; baseline.sh pg17 /root/opsd-132
 #   diff -r /root/opsd-132/baseline-pg14 /root/opsd-132/baseline-pg17
 # Connection: PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD/PGSSLMODE, or SOURCE_PG_* read from
@@ -15,7 +15,7 @@ PSQL_IMAGE=${PSQL_IMAGE:-postgres:17-alpine}
 # Javers tables is done in rowcounts.txt, hashing them would take too long on a t3.medium.
 CHECKSUM_TABLES=${CHECKSUM_TABLES:-"auth.auth_users referencedata.facilities referencedata.orderables referencedata.programs referencedata.role_assignments referencedata.users requisition.requisitions requisition.requisition_line_items requisition.status_changes fulfillment.orders fulfillment.order_line_items fulfillment.proofs_of_delivery stockmanagement.stock_cards stockmanagement.stock_card_line_items stockmanagement.physical_inventories report.jasper_templates"}
 
-get_env() { grep "^$1=" "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '"'; }
+get_env() { grep "^$1=" "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2-; }
 PGHOST=${PGHOST:-$(get_env SOURCE_PG_HOST)}
 PGPORT=${PGPORT:-$(get_env SOURCE_PG_PORT)}
 PGDATABASE=${PGDATABASE:-$(get_env SOURCE_PG_DB)}
@@ -24,9 +24,10 @@ PGPASSWORD=${PGPASSWORD:-$(get_env SOURCE_PG_PASSWORD)}
 PGSSLMODE=${PGSSLMODE:-$(get_env SOURCE_PG_SSLMODE)}
 : "${PGHOST:?set PGHOST or SOURCE_PG_HOST in $ENV_FILE}"
 : "${PGPASSWORD:?set PGPASSWORD or SOURCE_PG_PASSWORD in $ENV_FILE}"
+export PGPASSWORD
 
 q() {
-  docker run --rm -e PGPASSWORD="$PGPASSWORD" "$PSQL_IMAGE" \
+  docker run --rm -e PGPASSWORD "$PSQL_IMAGE" \
     psql "host=$PGHOST port=${PGPORT:-5432} dbname=${PGDATABASE:-open_lmis} user=${PGUSER:-postgres} sslmode=${PGSSLMODE:-require}" \
     -At -v ON_ERROR_STOP=0 "$@" </dev/null 2>&1
 }
@@ -34,6 +35,7 @@ log() { echo "[$(date -u +%FT%TZ)] $*" >&2; }
 
 mkdir -p "$OUT"
 docker pull -q "$PSQL_IMAGE" >/dev/null || { echo "cannot pull $PSQL_IMAGE" >&2; exit 1; }
+[ "$(q -c 'select 1')" = 1 ] || { log "cannot connect to ${PGUSER:-postgres}@$PGHOST/${PGDATABASE:-open_lmis}: $(q -c 'select 1' | head -1)"; exit 1; }
 log "baseline $LABEL of ${PGUSER:-postgres}@$PGHOST/${PGDATABASE:-open_lmis} -> $OUT"
 
 log "version, size, settings"
