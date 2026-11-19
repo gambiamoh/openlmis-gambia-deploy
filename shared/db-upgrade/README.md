@@ -4,14 +4,6 @@ Tooling and the short procedure used for OPSD-132 (UAT 14 → 17). The long form
 the reporting-stack detach/re-attach steps are in the [OpenLMIS PostgreSQL upgrade manual](https://openlmis.atlassian.net/wiki/spaces/OP/pages/2179923985)
 (Confluence) and in `soldevelo-reporting-stack/docs/runbook-source-upgrade.md`.
 
-## Rule while prod and UAT run different majors
-
-`KEEP_OR_RESTORE=restore` rebuilds UAT from the latest **prod** snapshot. Until prod is on the
-same major as UAT, a restore puts UAT back on the old major (and hangs on `wait_available` when
-`.env-restore` names a parameter group of the newer family). Run the UAT job with `keep` only,
-and switch `DB_PARAMETER_GROUP_NAME` in `.env-restore` to the new family right after the prod
-upgrade.
-
 ## Scripts
 
 Both are parameterised by environment variables, so they work for UAT and prod alike.
