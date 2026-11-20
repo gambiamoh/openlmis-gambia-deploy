@@ -200,23 +200,6 @@ services:
       retries: 5
     logging: *logging
 
-  notification-truststore:
-    build:
-      context: config/notification
-    volumes:
-      - notification-truststore:/truststore
-    entrypoint:
-      - sh
-      - -c
-      - |
-        set -e
-        SRC=$$(find "$$JAVA_HOME" -name cacerts | head -n1)
-        cp "$$SRC" /truststore/cacerts
-        chmod u+w /truststore/cacerts
-        keytool -importcert -noprompt -alias mail-gov-gm -file /tmp/mail-gov-gm.pem \
-          -keystore /truststore/cacerts -storepass changeit
-    logging: *logging
-
   notification:
     restart: always
     image: openlmis/notification:${OL_NOTIFICATION_VERSION}
@@ -234,14 +217,10 @@ services:
         -Djava.security.egd=file:/dev/./urandom
         -Dlogback.configurationFile=/config/log/logback.xml
         -Dlogging.config=/config/log/logback.xml
-        -Djavax.net.ssl.trustStore=/truststore/cacerts
     volumes:
       - service-config:/config:ro
-      - notification-truststore:/truststore:ro
     depends_on:
       service-configuration:
-        condition: service_completed_successfully
-      notification-truststore:
         condition: service_completed_successfully
       consul:
         condition: service_healthy
@@ -432,4 +411,3 @@ volumes:
   nginx-log:
   auth-tomcat-log:
   consul-template-log:
-  notification-truststore:
